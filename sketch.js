@@ -1,14 +1,11 @@
-// this example workflow expects 512-inpainting-ema.safetensors to be installed
-// based on 
-
 let workflow;
 let comfy;
 let bg;
 let srcImg;
 let resImg;
 
-function preload() { workflow = loadJSON("img2img.json");
-  bg = loadImage("example.png");
+function preload() { workflow = loadJSON("CAPTCHA.json");
+  bg = loadImage("character-sheet.jpg");
 }
 
 function setup() {

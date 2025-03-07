@@ -1,0 +1,404 @@
+{
+  "68": {
+    "inputs": {
+      "action": "resize only",
+      "smaller_side": 600,
+      "larger_side": 0,
+      "scale_factor": 0,
+      "resize_mode": "any",
+      "side_ratio": "0",
+      "crop_pad_position": 0,
+      "pad_feathering": 0,
+      "pixels": [
+        "322",
+        0
+      ]
+    },
+    "class_type": "ImageResize",
+    "_meta": {
+      "title": "Image Resize"
+    }
+  },
+  "99": {
+    "inputs": {
+      "ckpt_name": "absolutereality_v181.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "100": {
+    "inputs": {
+      "text": "black and white pop art cartoon style painting of a person writing letters on screen, dreamy, modern style illustration ",
+      "clip": [
+        "99",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Positive"
+    }
+  },
+  "101": {
+    "inputs": {
+      "text": "deformed body, distorted face, nsfw, nude, text",
+      "clip": [
+        "99",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Negative"
+    }
+  },
+  "177": {
+    "inputs": {
+      "mode": true,
+      "seed": 1105435751671637,
+      "fixed_seed": 0
+    },
+    "class_type": "SeedSelector",
+    "_meta": {
+      "title": "Seed Selector"
+    }
+  },
+  "191": {
+    "inputs": {
+      "control_net_name": "control_v11f1p_sd15_depth.pth"
+    },
+    "class_type": "ControlNetLoader",
+    "_meta": {
+      "title": "Load ControlNet Model"
+    }
+  },
+  "196": {
+    "inputs": {
+      "batch_size": 1,
+      "latent": [
+        "202",
+        0
+      ]
+    },
+    "class_type": "CR Latent Batch Size",
+    "_meta": {
+      "title": "⚙️ CR Latent Batch Size"
+    }
+  },
+  "197": {
+    "inputs": {
+      "images": [
+        "309",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "202": {
+    "inputs": {
+      "tile_size": 1024,
+      "overlap": 64,
+      "temporal_size": 64,
+      "temporal_overlap": 8,
+      "pixels": [
+        "68",
+        0
+      ],
+      "vae": [
+        "99",
+        2
+      ]
+    },
+    "class_type": "VAEEncodeTiled",
+    "_meta": {
+      "title": "VAE Encode (Tiled)"
+    }
+  },
+  "216": {
+    "inputs": {
+      "control_net_name": "control_v11p_sd15_openpose.pth"
+    },
+    "class_type": "ControlNetLoader",
+    "_meta": {
+      "title": "Load ControlNet Model"
+    }
+  },
+  "233": {
+    "inputs": {
+      "seed": [
+        "177",
+        0
+      ],
+      "steps": 50,
+      "cfg": 5,
+      "sampler_name": "euler",
+      "scheduler": "karras",
+      "denoise": 1,
+      "preview_method": "auto",
+      "vae_decode": "true",
+      "model": [
+        "298",
+        0
+      ],
+      "positive": [
+        "250",
+        1
+      ],
+      "negative": [
+        "250",
+        2
+      ],
+      "latent_image": [
+        "196",
+        0
+      ],
+      "optional_vae": [
+        "99",
+        2
+      ]
+    },
+    "class_type": "KSampler (Efficient)",
+    "_meta": {
+      "title": "KSampler (Efficient)"
+    }
+  },
+  "235": {
+    "inputs": {
+      "ipadapter_file": "ip-adapter-plus-face_sd15.bin"
+    },
+    "class_type": "IPAdapterModelLoader",
+    "_meta": {
+      "title": "IPAdapter Model Loader"
+    }
+  },
+  "236": {
+    "inputs": {
+      "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+    },
+    "class_type": "CLIPVisionLoader",
+    "_meta": {
+      "title": "Load CLIP Vision"
+    }
+  },
+  "237": {
+    "inputs": {
+      "image": "AIDesn_02.jpg",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "250": {
+    "inputs": {
+      "seed": [
+        "177",
+        0
+      ],
+      "steps": 30,
+      "cfg": 5,
+      "sampler_name": "euler",
+      "scheduler": "karras",
+      "denoise": 1,
+      "preview_method": "auto",
+      "vae_decode": "true",
+      "model": [
+        "99",
+        0
+      ],
+      "positive": [
+        "312",
+        0
+      ],
+      "negative": [
+        "312",
+        1
+      ],
+      "latent_image": [
+        "196",
+        0
+      ],
+      "optional_vae": [
+        "99",
+        2
+      ]
+    },
+    "class_type": "KSampler (Efficient)",
+    "_meta": {
+      "title": "KSampler (Efficient)"
+    }
+  },
+  "298": {
+    "inputs": {
+      "weight": 0.6,
+      "weight_type": "style transfer",
+      "combine_embeds": "concat",
+      "start_at": 0,
+      "end_at": 1,
+      "embeds_scaling": "V only",
+      "model": [
+        "99",
+        0
+      ],
+      "ipadapter": [
+        "235",
+        0
+      ],
+      "image": [
+        "324",
+        0
+      ],
+      "clip_vision": [
+        "236",
+        0
+      ]
+    },
+    "class_type": "IPAdapterAdvanced",
+    "_meta": {
+      "title": "IPAdapter Advanced"
+    }
+  },
+  "308": {
+    "inputs": {
+      "strength": 0.9,
+      "start_percent": 0,
+      "end_percent": 0.7000000000000001,
+      "positive": [
+        "100",
+        0
+      ],
+      "negative": [
+        "101",
+        0
+      ],
+      "control_net": [
+        "191",
+        0
+      ],
+      "image": [
+        "309",
+        0
+      ]
+    },
+    "class_type": "ACN_AdvancedControlNetApply",
+    "_meta": {
+      "title": "Apply Advanced ControlNet 🛂🅐🅒🅝"
+    }
+  },
+  "309": {
+    "inputs": {
+      "preprocessor": "DepthAnythingPreprocessor",
+      "resolution": 512,
+      "image": [
+        "68",
+        0
+      ]
+    },
+    "class_type": "AIO_Preprocessor",
+    "_meta": {
+      "title": "AIO Aux Preprocessor"
+    }
+  },
+  "310": {
+    "inputs": {
+      "images": [
+        "311",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "311": {
+    "inputs": {
+      "preprocessor": "OpenposePreprocessor",
+      "resolution": 512,
+      "image": [
+        "68",
+        0
+      ]
+    },
+    "class_type": "AIO_Preprocessor",
+    "_meta": {
+      "title": "AIO Aux Preprocessor"
+    }
+  },
+  "312": {
+    "inputs": {
+      "strength": 0.4,
+      "start_percent": 0,
+      "end_percent": 0.7000000000000001,
+      "positive": [
+        "308",
+        0
+      ],
+      "negative": [
+        "308",
+        1
+      ],
+      "control_net": [
+        "216",
+        0
+      ],
+      "image": [
+        "311",
+        0
+      ]
+    },
+    "class_type": "ACN_AdvancedControlNetApply",
+    "_meta": {
+      "title": "Apply Advanced ControlNet 🛂🅐🅒🅝"
+    }
+  },
+  "321": {
+    "inputs": {
+      "filename_prefix": "DoL_Vid2vid/Test",
+      "images": [
+        "233",
+        5
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "322": {
+    "inputs": {
+      "image": "character-sheet.jpg",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "323": {
+    "inputs": {
+      "image": "pasted/image (3).png",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "324": {
+    "inputs": {
+      "image": "pasted/image (4).png",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  }
+}
