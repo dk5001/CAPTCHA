@@ -23,11 +23,11 @@ function setup() {
 
 function requestImage() {
   // replace the LoadImage node with our source image
-  workflow[20] = comfy.image(srcImg);
+  workflow[323] = comfy.image(srcImg);
   // update the seed
-  workflow[3].inputs.seed = workflow[3].inputs.seed + 1;
+  workflow[177].inputs.seed = workflow[177].inputs.seed + 1;
   // reduce the number of steps (to make it faster)
-  workflow[3].inputs.steps = 10;
+  workflow[177].inputs.steps = 10;
 
   comfy.run(workflow, gotImage);
 }
