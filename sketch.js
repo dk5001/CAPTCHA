@@ -25,6 +25,21 @@ function setup() {
 
   slider = createSlider(1, 3, 2, 1);
   slider.input(updateIpAdapter);
+
+  let uploadButton = createFileInput(handleFile);
+  uploadButton.position(10, 10);
+}
+
+function handleFile(file) {
+  if (file.type === 'image') {
+    bg = loadImage(file.data, () => {
+      bg.loadPixels();
+      resizeCanvas(bg.width, bg.height);
+      srcImg = createGraphics(width, height);
+    });
+  } else {
+    console.log('Not an image file!');
+  }
 }
 
 function updateIpAdapter() {
