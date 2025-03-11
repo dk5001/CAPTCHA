@@ -1,34 +1,51 @@
 let workflow;
 let comfy;
 let bg;
+let ipAdapter;
 let srcImg;
 let resImg;
+let ipSlider;
 
 function preload() { workflow = loadJSON("character-sheet-ipadapter.json");
-  bg = loadImage("character-sheet.jpg");
+  bg = loadImage("Brain.png");
+  ipAdapter = loadImage("ipAdapter-2.png");
 }
 
 function setup() {
-  createCanvas(768, 768);
+  bg.loadPixels();
+  createCanvas(bg.width, bg.height);
   pixelDensity(1);
   srcImg = createGraphics(width, height);
-  
 
   comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");
   console.log("workflow is", workflow);
 
   let button = createButton("start generating");
   button.mousePressed(requestImage);
+
+  slider = createSlider(1, 3, 2, 1);
+  slider.input(updateIpAdapter);
+}
+
+function updateIpAdapter() {
+  let value = slider.value();
+  ipAdapter = loadImage(`ipAdapter-${value}.png`);
 }
 
 function requestImage() {
   // replace the LoadImage node with our source image
   workflow[10] = comfy.image(srcImg);
+
   // update the seed in KSampler  
-  workflow[3].inputs.seed = workflow[3].inputs.seed + 1;
+  // workflow[3].inputs.seed = workflow[3].inputs.seed + 1;
+  workflow[3].inputs.seed = Math.floor(Math.random() * 1e15);
   console.log("seed: ", workflow[3].inputs.seed);
+  
   // reduce the number of steps (to make it faster)
-  workflow[3].inputs.steps = 30;
+  workflow[3].inputs.steps = 10;
+  
+  // replace ipAdapter with our own image
+  workflow[28] = comfy.image(ipAdapter);
 
   comfy.run(workflow, gotImage);
 }
@@ -41,21 +58,15 @@ function gotImage(results, err) {
   if (results.length > 0) {
     resImg = loadImage(results[0].src);
   }
-
-  // automatically run again
-  // requestImage();
 }
 
 function draw() {
   // draw a scene into the source image to use for generation
   srcImg.image(bg, 0, 0);
-  // burn a "hole" into the image
-  srcImg.erase();
-  srcImg.circle(mouseX, mouseY, 200);
-  srcImg.noErase();
 
   //if we have an image, put it onto the canvas
   if (resImg) {
     image(resImg, 0, 0, width, height);
+    // console.log("result image drawn");
   }
 }
