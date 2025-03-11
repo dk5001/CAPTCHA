@@ -4,7 +4,7 @@ let bg;
 let srcImg;
 let resImg;
 
-function preload() { workflow = loadJSON("CAPTCHA.json");
+function preload() { workflow = loadJSON("character-sheet-ipadapter.json");
   bg = loadImage("character-sheet.jpg");
 }
 
@@ -23,11 +23,12 @@ function setup() {
 
 function requestImage() {
   // replace the LoadImage node with our source image
-  workflow[323] = comfy.image(srcImg);
-  // update the seed
-  workflow[177].inputs.seed = workflow[177].inputs.seed + 1;
+  workflow[10] = comfy.image(srcImg);
+  // update the seed in KSampler  
+  workflow[3].inputs.seed = workflow[3].inputs.seed + 1;
+  console.log("seed: ", workflow[3].inputs.seed);
   // reduce the number of steps (to make it faster)
-  workflow[177].inputs.steps = 10;
+  workflow[3].inputs.steps = 30;
 
   comfy.run(workflow, gotImage);
 }
