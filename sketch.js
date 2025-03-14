@@ -17,7 +17,9 @@ function setup() {
   pixelDensity(1);
   srcImg = createGraphics(width, height);
 
-  comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");
+  // http://127.0.0.1:8188 (if you're using the standard ComfyUI)
+  // http://127.0.0.1:8000 (if you're using ComfyUI Desktop)
+  comfy = new ComfyUiP5Helper("http://127.0.0.1:8000/");
   console.log("workflow is", workflow);
 
   let button = createButton("start generating");
