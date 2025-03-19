@@ -1,0 +1,18 @@
+{
+    "img01.png": { "Calm/Neutral": 5, "Confident/Positive": 3, "Chaotic/Negative": 1 },
+    "img02.png": { "Calm/Neutral": 2, "Confident/Positive": 4, "Chaotic/Negative": 3 },
+    "img03.png": { "Calm/Neutral": 4, "Confident/Positive": 5, "Chaotic/Negative": 1 },
+    "img04.png": { "Calm/Neutral": 5, "Confident/Positive": 2, "Chaotic/Negative": 2 },
+    "img05.png": { "Calm/Neutral": 3, "Confident/Positive": 5, "Chaotic/Negative": 2 },
+    "img06.png": { "Calm/Neutral": 4, "Confident/Positive": 3, "Chaotic/Negative": 3 },
+    "img07.png": { "Calm/Neutral": 1, "Confident/Positive": 2, "Chaotic/Negative": 6 },
+    "img08.png": { "Calm/Neutral": 3, "Confident/Positive": 4, "Chaotic/Negative": 3 },
+    "img09.png": { "Calm/Neutral": 5, "Confident/Positive": 3, "Chaotic/Negative": 2 },
+    "img10.png": { "Calm/Neutral": 2, "Confident/Positive": 1, "Chaotic/Negative": 6 },
+    "img11.png": { "Calm/Neutral": 4, "Confident/Positive": 4, "Chaotic/Negative": 2 },
+    "img12.png": { "Calm/Neutral": 5, "Confident/Positive": 2, "Chaotic/Negative": 3 },
+    "img13.png": { "Calm/Neutral": 1, "Confident/Positive": 3, "Chaotic/Negative": 6 },
+    "img14.png": { "Calm/Neutral": 3, "Confident/Positive": 5, "Chaotic/Negative": 2 },
+    "img15.png": { "Calm/Neutral": 4, "Confident/Positive": 4, "Chaotic/Negative": 2 }
+  }
+  
