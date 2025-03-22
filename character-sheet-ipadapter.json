@@ -31,7 +31,7 @@
   },
   "6": {
     "inputs": {
-      "text": "scanned image of brain on a black background, scanned image quality ",
+      "text": "black and white scanned portrait, pixelated, scanned image quality ",
       "clip": [
         "14",
         1
@@ -44,7 +44,7 @@
   },
   "7": {
     "inputs": {
-      "text": "watermark, nsfw, nude, text",
+      "text": "distorted face, watermark, nsfw, nude, text",
       "clip": [
         "14",
         1
@@ -108,7 +108,7 @@
   },
   "15": {
     "inputs": {
-      "preprocessor": "DepthAnythingPreprocessor",
+      "preprocessor": "OpenposePreprocessor",
       "resolution": 512,
       "image": [
         "10",
@@ -122,7 +122,7 @@
   },
   "16": {
     "inputs": {
-      "control_net_name": "control_v11f1p_sd15_depth.pth"
+      "control_net_name": "control_v11p_sd15_openpose.pth"
     },
     "class_type": "ControlNetLoader",
     "_meta": {

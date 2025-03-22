@@ -9,7 +9,7 @@ let ipSlider;
 
 // CAPTCHA interface variables
 let gridSize = 3; // Number of rows and columns
-let tileSize; // Size of each tile
+// let tileSize; // Size of each tile
 let selectedTiles = []; // Array to store selected tiles
 let tileImages = []; // Array to store the loaded images
 let displayedImages = []; // Array to store 9 images displayed in the grid
@@ -43,11 +43,43 @@ let faceCaptured = false;       // Flag to ensure we only capture once
 let jsonFilename = "";          // Store filename to use for both JSON and image
 let capturedImage = null;       // The captured face image
 
+// Configuration object for easily adjusting the interface
+const config = {
+  // Canvas and layout
+  canvasWidth: 800,          // Base canvas width
+  canvasHeight: 900,         // Base canvas height
+  headerHeight: 160,         // Height of the header
+  gridSize: 3,               // Number of rows and columns
+  
+  // Spacing and sizing (all relative to canvas size)
+  tileSizeRatio: 0.25,       // Tile size as ratio of canvas width
+  gridSpacing: 10,           // Space between tiles
+  buttonWidth: 200,          // Width of buttons
+  buttonHeight: 50,          // Height of buttons
+  buttonMargin: 60,          // Margin from bottom for buttons
+  
+  // Text sizing
+  headerTextSize: 36,        // Size of header text
+  countdownTextSize: 24,     // Size for countdown text
+  buttonTextSize: 20,        // Size for button text
+  processingTextSize: 30,    // Size for processing message
+  
+  // Colors
+  selectionHeaderColor: [100, 100, 100],    // Gray for selection mode
+  rationalTestHeaderColor: [255, 0, 0],     // Red for rational test mode
+  selectionOverlayColor: [100, 0, 0, 100],  // Overlay for selected tiles
+  gridLineColor: [255, 255, 255],           // Color of grid lines
+  gridLineWeight: 3                         // Thickness of grid lines
+};
+
+// Compute derived values
+let tileSize;          // Will be calculated in setup()
+let gridOffsetX;       // X position to center the grid
+let gridOffsetY;       // Y position to place the grid below header
+
 function preload() {
   // Load ComfyUI workflow
   workflow = loadJSON("character-sheet-ipadapter.json");
-  bg = loadImage("Brain.png");
-  ipAdapter = loadImage("ipAdapter-2.png");
   
   // Load CAPTCHA weights and images
   weights = loadJSON('weights.json');
@@ -71,11 +103,15 @@ function gotFaces(results) {
 }
 
 function setup() {
-  createCanvas(400, 500);
-  tileSize = width / gridSize;
-  pixelDensity(1);
+  createCanvas(config.canvasWidth, config.canvasHeight);
+  tileSize = config.canvasWidth * config.tileSizeRatio;
+  let gridWidth = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
+  let gridHeight = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
+  gridOffsetX = (config.canvasWidth - gridWidth) / 2;
+  gridOffsetY = config.headerHeight + (config.canvasHeight - config.headerHeight - gridHeight) / 2;
+  pixelDensity(1);    // ?
   
-  srcImg = createGraphics(width, height);
+  srcImg = createGraphics(config.canvasWidth, config.canvasHeight);
 
   comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");  // for ComfyUI Web
   console.log("workflow is", workflow);
@@ -90,31 +126,40 @@ function setup() {
 
   // Create generation button (initially hidden)
   let generateButton = createButton("Generate Image");
-  generateButton.position(width / 2 - 60, height - 40);
+  generateButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, 
+                         config.canvasHeight - config.buttonMargin);
+  generateButton.size(config.buttonWidth, config.buttonHeight);
+  generateButton.style('font-size', config.buttonTextSize + 'px');
   generateButton.mousePressed(requestImage);
   generateButton.id("generateButton");
   generateButton.style("display", "none");
 
   // Create slider for IPAdapter strength (initially hidden)
   slider = createSlider(1, 3, 2, 1);
-  slider.position(width / 2 - 60, height - 70);
+  slider.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin - config.buttonHeight - 20);
+  slider.style('width', config.buttonWidth + 'px');
   slider.input(updateIpAdapter);
   slider.id("ipSlider");
   slider.style("display", "none");
 
+  // Initialize image selection as before
+  initializeImages();
+}
+
+function initializeImages() {
   // Randomly select 9 images from the loaded images and track their names
   let shuffledIndices = shuffle([...Array(tileImages.length).keys()]);
-  displayedImages = shuffledIndices.slice(0, gridSize * gridSize).map(i => tileImages[i]);
+  displayedImages = shuffledIndices.slice(0, config.gridSize * config.gridSize).map(i => tileImages[i]);
   
   // Keep track of the selected image names
   let displayedImageNames = shuffledIndices.slice(0, gridSize * gridSize).map(i => imageNames[i]);
   
   // Store the mapping between grid positions and image names
   imageNameGrid = [];
-  for (let i = 0; i < gridSize * gridSize; i++) {
+  for (let i = 0; i < config.gridSize * config.gridSize; i++) {
     imageNameGrid.push(displayedImageNames[i]);
   }
-
+  
   // Initialize selectedTiles array
   for (let i = 0; i < gridSize; i++) {
     selectedTiles[i] = [];
@@ -131,99 +176,38 @@ function draw() {
   if (appState !== "GENERATION") {
     // Draw header
     fill(headerColor[0], headerColor[1], headerColor[2]);
-    rect(0, 0, width, 80);
+    rect(0, 0, config.canvasWidth, config.headerHeight);
 
     // Draw captcha instructions
     fill(255);
-    textSize(18);
+    textSize(config.headerTextSize);
     textAlign(CENTER, TOP);
-    text(captchaTitle, width/2, 20);
+    text(captchaTitle, config.canvasWidth / 2, 40);
 
-    // Check if we need to transition states
-    if (appState === "SELECTION" && selectionCount === 1 && selectionTime > 0 && millis() - selectionTime > 3000) {
-      transitionToRationalTest();
-    }
-
-    // Check if we should capture the webcam image (3 seconds after RATIONAL_TEST begins)
-    if (appState === "RATIONAL_TEST" && !faceCaptured && 
-        rationalTestStartTime > 0 && millis() - rationalTestStartTime > 3000) {
-      captureUserFace();
-      faceCaptured = true;
-      
-      // Show the generate button after capturing
-      document.getElementById("generateButton").style.display = "block";
-      document.getElementById("ipSlider").style.display = "block";
-    }
-
-    // Get the selected image (if any)
-    if (selectionCount === 1 && selectedCol >= 0 && selectedRow >= 0) {
-      let selectedImgIndex = selectedCol + selectedRow * gridSize;
-      selectedImage = displayedImages[selectedImgIndex];
-    }
+    // Handle state transitions
+    checkStateTransitions();
 
     // Draw grid based on current state
     drawGrid();
-
+    
     // Draw skip button (only in selection state)
     if (appState === "SELECTION" && !interactionsLocked) {
       drawSkipButton();
     }
 
     // Display countdown timer if only one tile is selected
-    if (selectionCount === 1 && selectionTime > 0 && !showingWebcam) {
-      let timeLeft = 3 - floor((millis() - selectionTime) / 1000);
-      if (timeLeft >= 0) {
-        fill(0);
-        textAlign(CENTER, TOP);
-        textSize(16);
-        text(`Scanning in ${timeLeft}...`, width / 2, height - 450);
-      }
-    }
+    drawCountdownTimer();
   } else {
-    // In GENERATION state show the captured image and then the result
-    if (capturedImage) {
-      image(capturedImage, 0, 0, width, height);
-    }
-    
-    // Show generation progress or result
-    if (resImg) {
-      image(resImg, 0, 0, width, height);
-      
-      // Add a reset button to restart CAPTCHA
-      if (!window.resetButton) {
-        window.resetButton = createButton("New CAPTCHA");
-        window.resetButton.position(width / 2 - 50, height - 40);
-        window.resetButton.mousePressed(() => {
-          resetCaptcha();
-          capturedImage = null;
-          resImg = null;
-          
-          // Hide generation UI elements
-          document.getElementById("generateButton").style.display = "none";
-          document.getElementById("ipSlider").style.display = "none";
-          
-          if (window.resetButton) {
-            window.resetButton.remove();
-            window.resetButton = null;
-          }
-        });
-      }
-    } else {
-      // Show processing message
-      fill(255);
-      stroke(0);
-      textSize(24);
-      textAlign(CENTER, CENTER);
-      text("Processing your image...", width/2, height/2);
-    }
+    // In GENERATION state
+    drawGenerationState();
   }
 }
 
 function drawGrid() {
-  for (let i = 0; i < gridSize; i++) {
-    for (let j = 0; j < gridSize; j++) {
-      let x = i * tileSize;
-      let y = j * tileSize + 80; // Offset for header
+  for (let i = 0; i < config.gridSize; i++) {
+    for (let j = 0; j < config.gridSize; j++) {
+      let x = gridOffsetX + i * (tileSize + config.gridSpacing);
+      let y = gridOffsetY + j * (tileSize + config.gridSpacing);
       
       if (appState === "RATIONAL_TEST" && selectedTiles[i][j]) {
         // Draw webcam footage in selected tile
@@ -233,23 +217,24 @@ function drawGrid() {
         image(selectedImage, x, y, tileSize, tileSize);
       } else {
         // Normal display when no selection
-        let imgIndex = i + j * gridSize;
+        let imgIndex = i + j * config.gridSize;
         image(displayedImages[imgIndex], x, y, tileSize, tileSize);
       }
 
       // Draw selection overlay
       if (selectedTiles[i][j]) {
         if (appState === "RATIONAL_TEST") {
-          fill(255, 0, 0, 100); // Red for rational test state
+            let alpha = 100 + 50 * sin(millis() / 500); // Calculate alpha using sine wave
+            fill(255, 0, 0, alpha); // Red for rational test state with blinking effect
         } else {
-          fill(100, 0, 0, 100); // Darker red for selection state
+          fill(config.selectionOverlayColor); // Darker red for selection state
         }
         rect(x, y, tileSize, tileSize);
       }
 
        // Draw grid lines
-       stroke(255);
-       strokeWeight(2);
+       stroke(config.gridLineColor);
+       strokeWeight(config.gridLineWeight);
        noFill();
        rect(x, y, tileSize, tileSize);
     }
@@ -257,20 +242,8 @@ function drawGrid() {
 }
 
 function drawWebcamTile(x, y) {
-  // Draw zoomed-in webcam footage in the selected tile
-  video.loadPixels();
-  
-  // Convert to grayscale
-  for (let k = 0; k < video.pixels.length; k += 4) {
-    let r = video.pixels[k];
-    let g = video.pixels[k + 1];
-    let b = video.pixels[k + 2];
-    let gray = (r + g + b) / 3;
-    video.pixels[k] = gray;
-    video.pixels[k + 1] = gray;
-    video.pixels[k + 2] = gray;
-  }
-  video.updatePixels();
+  // Apply the black and white effect
+  applyBlackAndWhiteEffect(video);
   
   // Draw mirrored webcam
   let zoomedTileSize = tileSize / 2;
@@ -284,12 +257,113 @@ function drawWebcamTile(x, y) {
   pop();
 }
 
+function applyBlackAndWhiteEffect(img) {
+  img.loadPixels();
+  for (let k = 0; k < img.pixels.length; k += 4) {
+    let r = img.pixels[k];
+    let g = img.pixels[k + 1];
+    let b = img.pixels[k + 2];
+    let gray = (r + g + b) / 3;
+    
+    // Posterize effect - reduce to 3-4 levels
+    // gray = Math.floor(gray / 64) * 64;
+    
+    img.pixels[k] = gray;
+    img.pixels[k + 1] = gray;
+    img.pixels[k + 2] = gray;
+  }
+  img.updatePixels();
+}
+
 function drawSkipButton() {
   fill(10, 10, 10, 150); // Semi-transparent black for button
-  rect(width - 110, height - 40, 100, 30, 5);
+  rect(config.canvasWidth - config.buttonWidth - 20, 
+    config.canvasHeight - config.buttonHeight - 20, 
+    config.buttonWidth, config.buttonHeight, 10);
   fill(255);
-  textAlign(CENTER, CENTER);
-  text("SHUFFLE", width - 60, height - 25);
+  textAlign(config.buttonTextSize);
+  text("SHUFFLE", config.canvasWidth - config.buttonWidth / 2 - 20, 
+    config.canvasHeight - config.buttonHeight / 2 - 35);
+}
+
+function drawCountdownTimer() {
+  // Display countdown timer if only one tile is selected
+  if (selectionCount === 1 && selectionTime > 0 && !showingWebcam) {
+    let timeLeft = 3 - floor((millis() - selectionTime) / 1000);
+    if (timeLeft >= 0) {
+      fill(0);
+      textAlign(CENTER, TOP);
+      textSize(config.countdownTextSize);
+      text(`Scanning in ${timeLeft}...`, config.canvasWidth / 2, config.canvasHeight - 450);
+    }
+  }
+}
+
+function drawGenerationState() {
+  // In GENERATION state show the captured image and then the result
+  if (capturedImage) {
+    image(capturedImage, 0, 0, config.canvasWidth, config.canvasHeight);
+  }
+  
+  // Show generation progress or result
+  if (resImg) {
+    image(resImg, 0, 0, config.canvasWidth, config.canvasHeight);
+    
+    // Add a reset button to restart CAPTCHA
+    if (!window.resetButton) {
+      window.resetButton = createButton("New session");
+      window.resetButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin);
+      window.resetButton.size(config.buttonWidth, config.buttonHeight);
+      window.resetButton.style('font-size', config.buttonTextSize + 'px');
+      window.resetButton.mousePressed(handleReset);
+    }
+  } else {
+    // Show processing message
+    fill(255);
+    stroke(0);
+    textSize(config.processingTextSize);
+    textAlign(CENTER, CENTER);
+    text("Processing your image...", config.canvasWidth / 2, config.canvasHeight / 2);
+  }
+}
+
+function handleReset() {
+  resetCaptcha();
+  capturedImage = null;
+  resImg = null;
+  
+  // Hide generation UI elements
+  document.getElementById("generateButton").style.display = "none";
+  document.getElementById("ipSlider").style.display = "none";
+  
+  if (window.resetButton) {
+    window.resetButton.remove();
+    window.resetButton = null;
+  }
+}
+
+function checkStateTransitions() {
+  // Check if we need to transition states
+  if (appState === "SELECTION" && selectionCount === 1 && selectionTime > 0 && millis() - selectionTime > 3000) {
+    transitionToRationalTest();
+  }
+
+  // Check if we should capture the webcam image (3 seconds after RATIONAL_TEST begins)
+  if (appState === "RATIONAL_TEST" && !faceCaptured && 
+      rationalTestStartTime > 0 && millis() - rationalTestStartTime > 3000) {
+    captureUserFace();
+    faceCaptured = true;
+    
+    // Show the generate button after capturing
+    document.getElementById("generateButton").style.display = "block";
+    document.getElementById("ipSlider").style.display = "block";
+  }
+
+  // Get the selected image (if any)
+  if (selectionCount === 1 && selectedCol >= 0 && selectedRow >= 0) {
+    let selectedImgIndex = selectedCol + selectedRow * config.gridSize;
+    selectedImage = displayedImages[selectedImgIndex];
+  }
 }
 
 function transitionToRationalTest() {
@@ -314,8 +388,27 @@ function captureUserFace() {
   capturedImage = video.get();
   capturedImage.loadPixels();
   
+  // Apply black & white posterization to the captured image
+  for (let k = 0; k < capturedImage.pixels.length; k += 4) {
+    let r = capturedImage.pixels[k];
+    let g = capturedImage.pixels[k + 1];
+    let b = capturedImage.pixels[k + 2];
+    let gray = (r + g + b) / 3;
+    
+    // Posterize effect - reduce to 3-4 levels
+    // gray = Math.floor(gray / 64) * 64;
+    
+    capturedImage.pixels[k] = gray;
+    capturedImage.pixels[k + 1] = gray;
+    capturedImage.pixels[k + 2] = gray;
+  }
+  capturedImage.updatePixels();
+  
   // Also set the bg for ComfyUI
   bg = capturedImage;
+
+  // Save the captured image for later use in generation
+  capturedImage.save(jsonFilename + '_captured.png'); // Save the captured face image
   
   // We don't save the raw capture directly, we'll save the generated image later
   console.log("User face captured and ready for generation");
@@ -354,41 +447,73 @@ function mousePressed() {
   
   // Check if skip button was clicked
   if (
-    mouseX > width - 110 &&
-    mouseX < width - 10 &&
-    mouseY > height - 40 &&
-    mouseY < height - 10
+    mouseX > config.canvasWidth - config.buttonWidth - 20 && 
+      mouseX < config.canvasWidth - 20 &&
+      mouseY > config.canvasHeight - config.buttonHeight - 20 && 
+      mouseY < config.canvasHeight - 20
   ) {
     console.log("Skip clicked");
     resetCaptcha();
     return;
   }
 
-  // Calculate grid position with offset for header
-  let col = floor(mouseX / tileSize);
-  let row = floor((mouseY - 80) / tileSize);
-
-  if (col >= 0 && col < gridSize && row >= 0 && row < gridSize) {
-    // Toggle selection state
-    selectedTiles[col][row] = !selectedTiles[col][row];
-
-    // Update counts and tracking variables
-    updateSelectionCount();
-    
-    // Reset webcam transition if multiple tiles are selected
-    if (selectionCount !== 1) {
-      selectionTime = 0;
-      showingWebcam = false;
-    } else {
-      // Start timer for webcam transition if exactly one tile is selected
-      selectionTime = millis();
-      selectedCol = col;
-      selectedRow = row;
+  // Calculate which tile was clicked by converting mouse position to grid coordinates
+  for (let i = 0; i < config.gridSize; i++) {
+    for (let j = 0; j < config.gridSize; j++) {
+      let x = gridOffsetX + i * (tileSize + config.gridSpacing);
+      let y = gridOffsetY + j * (tileSize + config.gridSpacing);
+      
+      if (mouseX > x && mouseX < x + tileSize && 
+          mouseY > y && mouseY < y + tileSize) {
+        // Toggle selection state
+        selectedTiles[i][j] = !selectedTiles[i][j];
+        
+        // Update counts and tracking variables
+        updateSelectionCount();
+        
+        // Reset webcam transition if multiple tiles are selected
+        if (selectionCount !== 1) {
+          selectionTime = 0;
+          showingWebcam = false;
+        } else {
+          // Start timer for webcam transition if exactly one tile is selected
+          selectionTime = millis();
+          selectedCol = i;
+          selectedRow = j;
+        }
+        
+        // Update scores based on selection logic
+        updateScores(i, j);
+        return;
+      }
     }
-
-    // Update scores based on selection logic
-    updateScores(col, row);
   }
+
+  // // Calculate grid position with offset for header
+  // let col = floor(mouseX / tileSize);
+  // let row = floor((mouseY - 80) / tileSize);
+
+  // if (col >= 0 && col < gridSize && row >= 0 && row < gridSize) {
+  //   // Toggle selection state
+  //   selectedTiles[col][row] = !selectedTiles[col][row];
+
+  //   // Update counts and tracking variables
+  //   updateSelectionCount();
+    
+  //   // Reset webcam transition if multiple tiles are selected
+  //   if (selectionCount !== 1) {
+  //     selectionTime = 0;
+  //     showingWebcam = false;
+  //   } else {
+  //     // Start timer for webcam transition if exactly one tile is selected
+  //     selectionTime = millis();
+  //     selectedCol = col;
+  //     selectedRow = row;
+  //   }
+
+  //   // Update scores based on selection logic
+  //   updateScores(col, row);
+  // }
 }
 
 function updateSelectionCount() {
@@ -448,7 +573,7 @@ function requestImage() {
   }
   
   // Prepare source image for generation
-  srcImg.image(capturedImage, 0, 0);
+  srcImg.image(capturedImage, 0, 0, config.canvasWidth, config.canvasHeight);
   
   // replace the LoadImage node with our source image
   workflow[10] = comfy.image(srcImg);
