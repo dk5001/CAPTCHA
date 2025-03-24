@@ -1,15 +1,6 @@
-// ComfyUI integration variables
-// let workflow;
-// let comfy;
-let bg;
-// let ipAdapter;
-let srcImg;
-let resImg;
-// let ipSlider;
-
 // CAPTCHA interface variables
+let srcImg;
 let gridSize = 3; // Number of rows and columns
-// let tileSize; // Size of each tile
 let selectedTiles = []; // Array to store selected tiles
 let tileImages = []; // Array to store the loaded images
 let displayedImages = []; // Array to store 9 images displayed in the grid
@@ -78,9 +69,6 @@ let gridOffsetX;       // X position to center the grid
 let gridOffsetY;       // Y position to place the grid below header
 
 function preload() {
-  // Load ComfyUI workflow
-  // workflow = loadJSON("character-sheet-ipadapter.json");
-  
   // Load CAPTCHA weights and images
   weights = loadJSON('weights.json');
 
@@ -106,24 +94,28 @@ function gotFaces(results) {
 function setupWebcam(deviceId = null) {
   // If a specific deviceId is provided, use that camera
   const constraints = {
-    video: deviceId ? { deviceId: { exact: deviceId } } : true,
-    flipped: true
+    // video: deviceId ? { deviceId: { exact: deviceId } } : true,
+    // flipped: true
+    video: {
+      facingMode: "user", // Use front camera for face detection
+      width: { ideal: 640 },
+      height: { ideal: 480 }
+    }
   };
   
   // Initialize webcam with constraints
   video = createCapture(constraints);
   
-  // Log which device was selected
-  video.elt.addEventListener('loadedmetadata', () => {
-    const videoTrack = video.elt.srcObject.getVideoTracks()[0];
-    console.log("Active webcam:", videoTrack.label, "Settings:", videoTrack.getSettings());
-  });
-  
   video.size(tileSize, tileSize);
   video.hide(); // Hide the default video element
 
   // Start detecting faces
-  faceMesh.detectStart(video, gotFaces);
+  // faceMesh.detectStart(video, gotFaces);
+  
+  // Start detecting faces after webcam is loaded
+  video.elt.onloadedmetadata = function() {
+    faceMesh.detectStart(video, gotFaces);
+  };
 }
 
 function setup() {
@@ -137,73 +129,15 @@ function setup() {
   
   srcImg = createGraphics(config.canvasWidth, config.canvasHeight);
 
-  // comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");  // for ComfyUI Web
-  // console.log("workflow is", workflow);
-
-  // Log available media devices before initializing webcam
-  if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-    navigator.mediaDevices.enumerateDevices()
-      .then(devices => {
-        console.log("Available media devices:");
-        let cameraDevices = [];
-        devices.forEach((device, index) => {
-          if (device.kind === 'videoinput') {
-            console.log(`Camera ${index}: ${device.label || 'Camera ' + (index + 1)}, ID: ${device.deviceId}`);
-            cameraDevices.push({ 
-              index: index,
-              label: device.label || 'Camera ' + (index + 1),
-              id: device.deviceId
-            });
-          }
-        });
-
-        // Create the camera selector dropdown
-        createCameraSelector(cameraDevices);
-        
-        // Choose which camera to use (e.g., first one, last one, or by ID)
-        const selectedCamera = cameraDevices[0]; // Use first camera (index 0)
-        // const selectedCamera = cameraDevices[cameraDevices.length - 1]; // Use last camera
-        
-        if (selectedCamera) {
-          console.log(`Selected camera: ${selectedCamera.label} (${selectedCamera.id})`);
-          setupWebcam(selectedCamera.id);
-        } else {
-          // Fallback to default camera if no devices found
-          setupWebcam();
-        }
-      })
-      .catch(err => {
-        console.error(`Error enumerating devices: ${err}`);
-        // Fallback to default camera on error
-        setupWebcam();
-      });
-  } else {
-    // If enumerateDevices is not supported, use default camera
-    setupWebcam();
-  }
-
-  // // Initialize webcam
+  // Initialize webcam
   // video = createCapture(VIDEO, { flipped: true });
-  // // Log which device was selected
-  // video.elt.addEventListener('loadedmetadata', () => {
-  //   const videoTrack = video.elt.srcObject.getVideoTracks()[0];
-  //   console.log("Active webcam:", videoTrack.label, "Settings:", videoTrack.getSettings());
-  // });
   // video.size(tileSize, tileSize);
   // video.hide(); // Hide the default video element
 
-  // // Start detecting faces
-  // faceMesh.detectStart(video, gotFaces);
+  setupWebcam();
 
-  // Create generation button (initially hidden)
-  // let generateButton = createButton("Generate Image");
-  // generateButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, 
-  //                        config.canvasHeight - config.buttonMargin);
-  // generateButton.size(config.buttonWidth, config.buttonHeight);
-  // generateButton.style('font-size', config.buttonTextSize + 'px');
-  // generateButton.mousePressed(requestImage);
-  // generateButton.id("generateButton");
-  // generateButton.style("display", "none");
+  // Start detecting faces
+  faceMesh.detectStart(video, gotFaces);
 
   let captureButton = createButton("Capture");
   captureButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, 
@@ -217,45 +151,43 @@ function setup() {
   captureButton.id("captureButton");
   captureButton.style("display", "none");
 
-  // Create slider for IPAdapter strength (initially hidden)
-  // slider = createSlider(1, 3, 2, 1);
-  // slider.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin - config.buttonHeight - 20);
-  // slider.style('width', config.buttonWidth + 'px');
-  // slider.input(updateIpAdapter);
-  // slider.id("ipSlider");
-  // slider.style("display", "none");
+  // Make all buttons responsive to touch
+  const buttons = selectAll('button');
+  for (let i = 0; i < buttons.length; i++) {
+    buttons[i].elt.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      this.click();  // Trigger the click event
+    });
+  }
 
   // Initialize image selection as before
   initializeImages();
-}
 
-function createCameraSelector(cameraDevices) {
-  // Create selector
-  let selector = createSelect();
-  selector.position(20, 20);
-  selector.size(200, 30);
-  selector.style('font-size', '16px');
-  selector.style('z-index', '100'); // Ensure it appears above other elements
-  selector.option('Select Camera...');
-  
-  // Add all cameras to dropdown
-  cameraDevices.forEach(camera => {
-    selector.option(camera.label, camera.id);
-  });
-  
-  // When a camera is selected
-  selector.changed(() => {
-    const deviceId = selector.value();
-    if (deviceId !== 'Select Camera...') {
-      // First remove existing video
+  // Handle mobile orientation changes
+  window.addEventListener('resize', function() {
+    // Only recreate canvas if significant change in dimensions
+    if (Math.abs(windowWidth - width) > 100 || Math.abs(windowHeight - height) > 100) {
+      resizeCanvas(min(windowWidth - 20, config.canvasWidth), 
+                  min(windowHeight - 20, config.canvasHeight));
+      
+      // Recalculate grid positioning
+      tileSize = min(width, height) * config.tileSizeRatio;
+      let gridWidth = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
+      let gridHeight = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
+      gridOffsetX = (width - gridWidth) / 2;
+      gridOffsetY = config.headerHeight + (height - config.headerHeight - gridHeight) / 2;
+      
+      // Update video size
       if (video) {
-        video.remove();
-        faceMesh.detectStop(); // Stop face detection on previous video
+        video.size(tileSize, tileSize);
       }
-      // Then setup with new camera
-      setupWebcam(deviceId);
     }
   });
+
+  // Prevent default touch behavior on the canvas
+  document.querySelector('canvas').addEventListener('touchstart', function(e) {
+    e.preventDefault();
+  }, { passive: false });
 }
 
 function initializeImages() {
@@ -416,27 +348,6 @@ function drawGenerationState() {
   if (capturedImage) {
     image(capturedImage, 0, 0, config.canvasWidth, config.canvasHeight);
   }
-  
-  // Show generation progress or result
-  // if (resImg) {
-  //   image(resImg, 0, 0, config.canvasWidth, config.canvasHeight);
-    
-  //   // Add a reset button to restart CAPTCHA
-  //   if (!window.resetButton) {
-  //     window.resetButton = createButton("New session");
-  //     window.resetButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin);
-  //     window.resetButton.size(config.buttonWidth, config.buttonHeight);
-  //     window.resetButton.style('font-size', config.buttonTextSize + 'px');
-  //     window.resetButton.mousePressed(handleReset);
-  //   }
-  // } else {
-  //   // Show processing message
-  //   fill(255);
-  //   stroke(0);
-  //   textSize(config.processingTextSize);
-  //   textAlign(CENTER, CENTER);
-  //   text("Processing your image...", config.canvasWidth / 2, config.canvasHeight / 2);
-  // }
 
   // Show completion message
   fill(255);
@@ -458,11 +369,9 @@ function drawGenerationState() {
 function handleReset() {
   resetCaptcha();
   capturedImage = null;
-  resImg = null;
   
   // Hide generation UI elements
-  document.getElementById("generateButton").style.display = "none";
-  document.getElementById("ipSlider").style.display = "none";
+  document.getElementById("captureButton").style.display = "block";
   
   if (window.resetButton) {
     window.resetButton.remove();
@@ -484,7 +393,6 @@ function checkStateTransitions() {
     
     // Show the generate button after capturing
     document.getElementById("captureButton").style.display = "block";
-    // document.getElementById("ipSlider").style.display = "block";
   }
 
   // Get the selected image (if any)
@@ -531,9 +439,6 @@ function captureUserFace() {
     capturedImage.pixels[k + 2] = gray;
   }
   capturedImage.updatePixels();
-  
-  // Also set the bg for ComfyUI
-  // bg = capturedImage;
 
   // Save the captured image for later use in generation
   capturedImage.save(jsonFilename + '_captured.png'); // Save the captured face image
@@ -576,31 +481,46 @@ function saveUserSelectionData() {
 }
 
 function mousePressed() {
-  // If interactions are locked, ignore all mouse presses
+  // Call shared handler with mouse coordinates
+  handleInteraction(mouseX, mouseY);
+}
+
+function touchStarted() {
+  // Check if there are any touches
+  if (touches.length > 0) {
+    // Use the first touch point's coordinates
+    handleInteraction(touches[0].x, touches[0].y);
+  }
+  // Prevent default behavior (scrolling, zooming)
+  return false;
+}
+
+function handleInteraction(x, y) {
+  // If interactions are locked, ignore all input
   if (interactionsLocked) {
     return;
   }
   
   // Check if skip button was clicked
   if (
-    mouseX > config.canvasWidth - config.buttonWidth - 20 && 
-      mouseX < config.canvasWidth - 20 &&
-      mouseY > config.canvasHeight - config.buttonHeight - 20 && 
-      mouseY < config.canvasHeight - 20
+    x > config.canvasWidth - config.buttonWidth - 20 && 
+    x < config.canvasWidth - 20 &&
+    y > config.canvasHeight - config.buttonHeight - 20 && 
+    y < config.canvasHeight - 20
   ) {
     console.log("Skip clicked");
     resetCaptcha();
     return;
   }
 
-  // Calculate which tile was clicked by converting mouse position to grid coordinates
+  // Calculate which tile was clicked by converting position to grid coordinates
   for (let i = 0; i < config.gridSize; i++) {
     for (let j = 0; j < config.gridSize; j++) {
-      let x = gridOffsetX + i * (tileSize + config.gridSpacing);
-      let y = gridOffsetY + j * (tileSize + config.gridSpacing);
+      let tileX = gridOffsetX + i * (tileSize + config.gridSpacing);
+      let tileY = gridOffsetY + j * (tileSize + config.gridSpacing);
       
-      if (mouseX > x && mouseX < x + tileSize && 
-          mouseY > y && mouseY < y + tileSize) {
+      if (x > tileX && x < tileX + tileSize && 
+          y > tileY && y < tileY + tileSize) {
         // Toggle selection state
         selectedTiles[i][j] = !selectedTiles[i][j];
         
@@ -624,32 +544,6 @@ function mousePressed() {
       }
     }
   }
-
-  // // Calculate grid position with offset for header
-  // let col = floor(mouseX / tileSize);
-  // let row = floor((mouseY - 80) / tileSize);
-
-  // if (col >= 0 && col < gridSize && row >= 0 && row < gridSize) {
-  //   // Toggle selection state
-  //   selectedTiles[col][row] = !selectedTiles[col][row];
-
-  //   // Update counts and tracking variables
-  //   updateSelectionCount();
-    
-  //   // Reset webcam transition if multiple tiles are selected
-  //   if (selectionCount !== 1) {
-  //     selectionTime = 0;
-  //     showingWebcam = false;
-  //   } else {
-  //     // Start timer for webcam transition if exactly one tile is selected
-  //     selectionTime = millis();
-  //     selectedCol = col;
-  //     selectedRow = row;
-  //   }
-
-  //   // Update scores based on selection logic
-  //   updateScores(col, row);
-  // }
 }
 
 function updateSelectionCount() {
@@ -689,56 +583,6 @@ function updateScores(col, row) {
     }
   }
 }
-
-function updateIpAdapter() {
-  let value = slider.value();
-  ipAdapter = loadImage(`ipAdapter-${value}.png`);
-}
-
-// function requestImage() {
-//   // Change to generation state
-//   appState = "GENERATION";
-  
-//   // Hide the generate button during processing
-//   document.getElementById("generateButton").style.display = "none";
-//   document.getElementById("ipSlider").style.display = "none";
-  
-//   if (!bg) {
-//     console.error("No background image available");
-//     return;
-//   }
-  
-//   // Prepare source image for generation
-//   srcImg.image(capturedImage, 0, 0, config.canvasWidth, config.canvasHeight);
-  
-//   // replace the LoadImage node with our source image
-//   workflow[10] = comfy.image(srcImg);
-
-//   // update the seed in KSampler  
-//   workflow[3].inputs.seed = Math.floor(Math.random() * 1e15);
-//   console.log("seed: ", workflow[3].inputs.seed);
-  
-//   // reduce the number of steps (to make it faster)
-//   workflow[3].inputs.steps = 10;
-  
-//   // replace ipAdapter with our own image
-//   workflow[28] = comfy.image(ipAdapter);
-
-//   comfy.run(workflow, gotImage);
-// }
-
-// function gotImage(results, err) {
-//   // data is an array of outputs from running the workflow
-//   console.log("gotImage", results);
-
-//   // you can load them like so
-//   if (results.length > 0) {
-//     resImg = loadImage(results[0].src, () => {
-//       // After loading the result image, save both the result and the JSON data
-//       saveGeneratedResults();
-//     });
-//   }
-// }
 
 function saveGeneratedResults() {
   // Update JSON data with the filename
