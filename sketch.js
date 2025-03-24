@@ -102,6 +102,30 @@ function gotFaces(results) {
   faces = results;
 }
 
+// Initialize webcam with specific device ID
+function setupWebcam(deviceId = null) {
+  // If a specific deviceId is provided, use that camera
+  const constraints = {
+    video: deviceId ? { deviceId: { exact: deviceId } } : true,
+    flipped: true
+  };
+  
+  // Initialize webcam with constraints
+  video = createCapture(constraints);
+  
+  // Log which device was selected
+  video.elt.addEventListener('loadedmetadata', () => {
+    const videoTrack = video.elt.srcObject.getVideoTracks()[0];
+    console.log("Active webcam:", videoTrack.label, "Settings:", videoTrack.getSettings());
+  });
+  
+  video.size(tileSize, tileSize);
+  video.hide(); // Hide the default video element
+
+  // Start detecting faces
+  faceMesh.detectStart(video, gotFaces);
+}
+
 function setup() {
   createCanvas(config.canvasWidth, config.canvasHeight);
   tileSize = config.canvasWidth * config.tileSizeRatio;
@@ -121,29 +145,55 @@ function setup() {
     navigator.mediaDevices.enumerateDevices()
       .then(devices => {
         console.log("Available media devices:");
-        devices.forEach(device => {
+        let cameraDevices = [];
+        devices.forEach((device, index) => {
           if (device.kind === 'videoinput') {
-            console.log(`Video device: ${device.label || 'Camera ' + (devices.indexOf(device) + 1)}, ID: ${device.deviceId}`);
+            console.log(`Camera ${index}: ${device.label || 'Camera ' + (index + 1)}, ID: ${device.deviceId}`);
+            cameraDevices.push({ 
+              index: index,
+              label: device.label || 'Camera ' + (index + 1),
+              id: device.deviceId
+            });
           }
         });
+
+        // Create the camera selector dropdown
+        createCameraSelector(cameraDevices);
+        
+        // Choose which camera to use (e.g., first one, last one, or by ID)
+        const selectedCamera = cameraDevices[0]; // Use first camera (index 0)
+        // const selectedCamera = cameraDevices[cameraDevices.length - 1]; // Use last camera
+        
+        if (selectedCamera) {
+          console.log(`Selected camera: ${selectedCamera.label} (${selectedCamera.id})`);
+          setupWebcam(selectedCamera.id);
+        } else {
+          // Fallback to default camera if no devices found
+          setupWebcam();
+        }
       })
       .catch(err => {
         console.error(`Error enumerating devices: ${err}`);
+        // Fallback to default camera on error
+        setupWebcam();
       });
+  } else {
+    // If enumerateDevices is not supported, use default camera
+    setupWebcam();
   }
 
-  // Initialize webcam
-  video = createCapture(VIDEO, { flipped: true });
-  // Log which device was selected
-  video.elt.addEventListener('loadedmetadata', () => {
-    const videoTrack = video.elt.srcObject.getVideoTracks()[0];
-    console.log("Active webcam:", videoTrack.label, "Settings:", videoTrack.getSettings());
-  });
-  video.size(tileSize, tileSize);
-  video.hide(); // Hide the default video element
+  // // Initialize webcam
+  // video = createCapture(VIDEO, { flipped: true });
+  // // Log which device was selected
+  // video.elt.addEventListener('loadedmetadata', () => {
+  //   const videoTrack = video.elt.srcObject.getVideoTracks()[0];
+  //   console.log("Active webcam:", videoTrack.label, "Settings:", videoTrack.getSettings());
+  // });
+  // video.size(tileSize, tileSize);
+  // video.hide(); // Hide the default video element
 
-  // Start detecting faces
-  faceMesh.detectStart(video, gotFaces);
+  // // Start detecting faces
+  // faceMesh.detectStart(video, gotFaces);
 
   // Create generation button (initially hidden)
   let generateButton = createButton("Generate Image");
@@ -165,6 +215,35 @@ function setup() {
 
   // Initialize image selection as before
   initializeImages();
+}
+
+function createCameraSelector(cameraDevices) {
+  // Create selector
+  let selector = createSelect();
+  selector.position(20, 20);
+  selector.size(200, 30);
+  selector.style('font-size', '16px');
+  selector.style('z-index', '100'); // Ensure it appears above other elements
+  selector.option('Select Camera...');
+  
+  // Add all cameras to dropdown
+  cameraDevices.forEach(camera => {
+    selector.option(camera.label, camera.id);
+  });
+  
+  // When a camera is selected
+  selector.changed(() => {
+    const deviceId = selector.value();
+    if (deviceId !== 'Select Camera...') {
+      // First remove existing video
+      if (video) {
+        video.remove();
+        faceMesh.detectStop(); // Stop face detection on previous video
+      }
+      // Then setup with new camera
+      setupWebcam(deviceId);
+    }
+  });
 }
 
 function initializeImages() {
