@@ -1,11 +1,11 @@
 // ComfyUI integration variables
-let workflow;
-let comfy;
+// let workflow;
+// let comfy;
 let bg;
-let ipAdapter;
+// let ipAdapter;
 let srcImg;
 let resImg;
-let ipSlider;
+// let ipSlider;
 
 // CAPTCHA interface variables
 let gridSize = 3; // Number of rows and columns
@@ -79,7 +79,7 @@ let gridOffsetY;       // Y position to place the grid below header
 
 function preload() {
   // Load ComfyUI workflow
-  workflow = loadJSON("character-sheet-ipadapter.json");
+  // workflow = loadJSON("character-sheet-ipadapter.json");
   
   // Load CAPTCHA weights and images
   weights = loadJSON('weights.json');
@@ -137,8 +137,8 @@ function setup() {
   
   srcImg = createGraphics(config.canvasWidth, config.canvasHeight);
 
-  comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");  // for ComfyUI Web
-  console.log("workflow is", workflow);
+  // comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");  // for ComfyUI Web
+  // console.log("workflow is", workflow);
 
   // Log available media devices before initializing webcam
   if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
@@ -196,22 +196,34 @@ function setup() {
   // faceMesh.detectStart(video, gotFaces);
 
   // Create generation button (initially hidden)
-  let generateButton = createButton("Generate Image");
-  generateButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, 
-                         config.canvasHeight - config.buttonMargin);
-  generateButton.size(config.buttonWidth, config.buttonHeight);
-  generateButton.style('font-size', config.buttonTextSize + 'px');
-  generateButton.mousePressed(requestImage);
-  generateButton.id("generateButton");
-  generateButton.style("display", "none");
+  // let generateButton = createButton("Generate Image");
+  // generateButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, 
+  //                        config.canvasHeight - config.buttonMargin);
+  // generateButton.size(config.buttonWidth, config.buttonHeight);
+  // generateButton.style('font-size', config.buttonTextSize + 'px');
+  // generateButton.mousePressed(requestImage);
+  // generateButton.id("generateButton");
+  // generateButton.style("display", "none");
+
+  let captureButton = createButton("Capture");
+  captureButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, 
+                      config.canvasHeight - config.buttonMargin);
+  captureButton.size(config.buttonWidth, config.buttonHeight);
+  captureButton.style('font-size', config.buttonTextSize + 'px');
+  captureButton.mousePressed(() => {
+    appState = "GENERATION";
+    saveGeneratedResults();
+  });
+  captureButton.id("captureButton");
+  captureButton.style("display", "none");
 
   // Create slider for IPAdapter strength (initially hidden)
-  slider = createSlider(1, 3, 2, 1);
-  slider.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin - config.buttonHeight - 20);
-  slider.style('width', config.buttonWidth + 'px');
-  slider.input(updateIpAdapter);
-  slider.id("ipSlider");
-  slider.style("display", "none");
+  // slider = createSlider(1, 3, 2, 1);
+  // slider.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin - config.buttonHeight - 20);
+  // slider.style('width', config.buttonWidth + 'px');
+  // slider.input(updateIpAdapter);
+  // slider.id("ipSlider");
+  // slider.style("display", "none");
 
   // Initialize image selection as before
   initializeImages();
@@ -406,24 +418,40 @@ function drawGenerationState() {
   }
   
   // Show generation progress or result
-  if (resImg) {
-    image(resImg, 0, 0, config.canvasWidth, config.canvasHeight);
+  // if (resImg) {
+  //   image(resImg, 0, 0, config.canvasWidth, config.canvasHeight);
     
-    // Add a reset button to restart CAPTCHA
-    if (!window.resetButton) {
-      window.resetButton = createButton("New session");
-      window.resetButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin);
-      window.resetButton.size(config.buttonWidth, config.buttonHeight);
-      window.resetButton.style('font-size', config.buttonTextSize + 'px');
-      window.resetButton.mousePressed(handleReset);
-    }
-  } else {
-    // Show processing message
-    fill(255);
-    stroke(0);
-    textSize(config.processingTextSize);
-    textAlign(CENTER, CENTER);
-    text("Processing your image...", config.canvasWidth / 2, config.canvasHeight / 2);
+  //   // Add a reset button to restart CAPTCHA
+  //   if (!window.resetButton) {
+  //     window.resetButton = createButton("New session");
+  //     window.resetButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin);
+  //     window.resetButton.size(config.buttonWidth, config.buttonHeight);
+  //     window.resetButton.style('font-size', config.buttonTextSize + 'px');
+  //     window.resetButton.mousePressed(handleReset);
+  //   }
+  // } else {
+  //   // Show processing message
+  //   fill(255);
+  //   stroke(0);
+  //   textSize(config.processingTextSize);
+  //   textAlign(CENTER, CENTER);
+  //   text("Processing your image...", config.canvasWidth / 2, config.canvasHeight / 2);
+  // }
+
+  // Show completion message
+  fill(255);
+  stroke(0);
+  textSize(config.processingTextSize);
+  textAlign(CENTER, CENTER);
+  text("Image captured successfully!", config.canvasWidth / 2, config.canvasHeight / 2);
+
+  // Add a reset button to restart CAPTCHA
+  if (!window.resetButton) {
+    window.resetButton = createButton("New session");
+    window.resetButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin);
+    window.resetButton.size(config.buttonWidth, config.buttonHeight);
+    window.resetButton.style('font-size', config.buttonTextSize + 'px');
+    window.resetButton.mousePressed(handleReset);
   }
 }
 
@@ -455,8 +483,8 @@ function checkStateTransitions() {
     faceCaptured = true;
     
     // Show the generate button after capturing
-    document.getElementById("generateButton").style.display = "block";
-    document.getElementById("ipSlider").style.display = "block";
+    document.getElementById("captureButton").style.display = "block";
+    // document.getElementById("ipSlider").style.display = "block";
   }
 
   // Get the selected image (if any)
@@ -505,13 +533,21 @@ function captureUserFace() {
   capturedImage.updatePixels();
   
   // Also set the bg for ComfyUI
-  bg = capturedImage;
+  // bg = capturedImage;
 
   // Save the captured image for later use in generation
   capturedImage.save(jsonFilename + '_captured.png'); // Save the captured face image
   
   // We don't save the raw capture directly, we'll save the generated image later
-  console.log("User face captured and ready for generation");
+  // console.log("User face captured and ready for generation");
+
+  // Transition to GENERATION state to display the captured image
+  appState = "GENERATION";
+
+  // Save results
+  saveGeneratedResults();
+  
+  console.log("User face captured and saved");
 }
 
 function saveUserSelectionData() {
@@ -659,50 +695,50 @@ function updateIpAdapter() {
   ipAdapter = loadImage(`ipAdapter-${value}.png`);
 }
 
-function requestImage() {
-  // Change to generation state
-  appState = "GENERATION";
+// function requestImage() {
+//   // Change to generation state
+//   appState = "GENERATION";
   
-  // Hide the generate button during processing
-  document.getElementById("generateButton").style.display = "none";
-  document.getElementById("ipSlider").style.display = "none";
+//   // Hide the generate button during processing
+//   document.getElementById("generateButton").style.display = "none";
+//   document.getElementById("ipSlider").style.display = "none";
   
-  if (!bg) {
-    console.error("No background image available");
-    return;
-  }
+//   if (!bg) {
+//     console.error("No background image available");
+//     return;
+//   }
   
-  // Prepare source image for generation
-  srcImg.image(capturedImage, 0, 0, config.canvasWidth, config.canvasHeight);
+//   // Prepare source image for generation
+//   srcImg.image(capturedImage, 0, 0, config.canvasWidth, config.canvasHeight);
   
-  // replace the LoadImage node with our source image
-  workflow[10] = comfy.image(srcImg);
+//   // replace the LoadImage node with our source image
+//   workflow[10] = comfy.image(srcImg);
 
-  // update the seed in KSampler  
-  workflow[3].inputs.seed = Math.floor(Math.random() * 1e15);
-  console.log("seed: ", workflow[3].inputs.seed);
+//   // update the seed in KSampler  
+//   workflow[3].inputs.seed = Math.floor(Math.random() * 1e15);
+//   console.log("seed: ", workflow[3].inputs.seed);
   
-  // reduce the number of steps (to make it faster)
-  workflow[3].inputs.steps = 10;
+//   // reduce the number of steps (to make it faster)
+//   workflow[3].inputs.steps = 10;
   
-  // replace ipAdapter with our own image
-  workflow[28] = comfy.image(ipAdapter);
+//   // replace ipAdapter with our own image
+//   workflow[28] = comfy.image(ipAdapter);
 
-  comfy.run(workflow, gotImage);
-}
+//   comfy.run(workflow, gotImage);
+// }
 
-function gotImage(results, err) {
-  // data is an array of outputs from running the workflow
-  console.log("gotImage", results);
+// function gotImage(results, err) {
+//   // data is an array of outputs from running the workflow
+//   console.log("gotImage", results);
 
-  // you can load them like so
-  if (results.length > 0) {
-    resImg = loadImage(results[0].src, () => {
-      // After loading the result image, save both the result and the JSON data
-      saveGeneratedResults();
-    });
-  }
-}
+//   // you can load them like so
+//   if (results.length > 0) {
+//     resImg = loadImage(results[0].src, () => {
+//       // After loading the result image, save both the result and the JSON data
+//       saveGeneratedResults();
+//     });
+//   }
+// }
 
 function saveGeneratedResults() {
   // Update JSON data with the filename
@@ -712,9 +748,9 @@ function saveGeneratedResults() {
   saveJSON(userSelectionData, jsonFilename + '.json');
   
   // Save the generated image
-  resImg.save(jsonFilename + '.png');
+  // resImg.save(jsonFilename + '.png');
   
-  console.log("Generation complete - saved image and data:", jsonFilename);
+  console.log("Save complete - saved image and data:", jsonFilename);
 }
 
 function resetCaptcha() {
