@@ -109,15 +109,36 @@ function setup() {
   let gridHeight = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
   gridOffsetX = (config.canvasWidth - gridWidth) / 2;
   gridOffsetY = config.headerHeight + (config.canvasHeight - config.headerHeight - gridHeight) / 2;
-  pixelDensity(1);    // ?
+  pixelDensity(1);  
   
   srcImg = createGraphics(config.canvasWidth, config.canvasHeight);
 
   comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");  // for ComfyUI Web
   console.log("workflow is", workflow);
 
+  // Log available media devices before initializing webcam
+  if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+    navigator.mediaDevices.enumerateDevices()
+      .then(devices => {
+        console.log("Available media devices:");
+        devices.forEach(device => {
+          if (device.kind === 'videoinput') {
+            console.log(`Video device: ${device.label || 'Camera ' + (devices.indexOf(device) + 1)}, ID: ${device.deviceId}`);
+          }
+        });
+      })
+      .catch(err => {
+        console.error(`Error enumerating devices: ${err}`);
+      });
+  }
+
   // Initialize webcam
   video = createCapture(VIDEO, { flipped: true });
+  // Log which device was selected
+  video.elt.addEventListener('loadedmetadata', () => {
+    const videoTrack = video.elt.srcObject.getVideoTracks()[0];
+    console.log("Active webcam:", videoTrack.label, "Settings:", videoTrack.getSettings());
+  });
   video.size(tileSize, tileSize);
   video.hide(); // Hide the default video element
 
@@ -377,7 +398,7 @@ function transitionToRationalTest() {
   console.log("Transitioning to rational test");
 
   // Create a unique filename base to use for both JSON and image
-  jsonFilename = 'user_selection_' + Date.now();
+  jsonFilename = 'subject_' + Date.now();
   
   // Save the JSON data immediately
   saveUserSelectionData();
