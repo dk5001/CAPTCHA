@@ -11,7 +11,7 @@ let weights; // Object to store the weights from JSON file
 
 // Application state variables
 let appState = "SELECTION"; // Can be "SELECTION", "RATIONAL_TEST" or "GENERATION"
-let captchaTitle = "Choose the most rational state";
+let captchaTitle = "다음 중 가장 이성적인 상태를 고르시오";
 let headerColor = [100, 100, 100]; // Initial gray color for header
 let interactionsLocked = false; // Flag to lock interactions
 
@@ -442,7 +442,7 @@ function drawSkipButton() {
     config.buttonWidth, config.buttonHeight, 10);
   fill(255);
   textAlign(config.buttonTextSize);
-  text("SHUFFLE", config.canvasWidth - config.buttonWidth / 2 - 20, 
+  text("건너뛰기", config.canvasWidth - config.buttonWidth / 2 - 20, 
     config.canvasHeight - config.buttonHeight / 2 - 35);
 }
 
@@ -467,7 +467,7 @@ function drawGenerationState() {
   fill(0);
   textSize(32);
   textAlign(CENTER, TOP);
-  text("RATIONAL TEST RESULTS", config.canvasWidth/2, 40);
+  text("검사 결과", config.canvasWidth/2, 40);
   
   // Add decorative line
   stroke(0);
@@ -479,12 +479,12 @@ function drawGenerationState() {
   textAlign(LEFT, TOP);
   noStroke();
   let currentDate = new Date();
-  text(`Date: ${currentDate.toLocaleDateString()}`, 60, 100);
-  text(`Time: ${currentDate.toLocaleTimeString()}`, 60, 125);
+  text(`날짜: ${currentDate.toLocaleDateString()}`, 60, 100);
+  text(`시간: ${currentDate.toLocaleTimeString()}`, 60, 125);
   
   // Show subject ID
   textSize(20);
-  text(`Subject ID: ${jsonFilename.replace('subject_', '')}`, 60, 160);
+  text(`사용자 ID: ${jsonFilename.replace('subject_', '')}`, 60, 160);
   
   // Add another decorative line
   stroke(0);
@@ -507,13 +507,13 @@ function drawGenerationState() {
   
   // Display the selected image on the left
   if (selectedImage) {
-    text("Selected Image:", leftImgX, 225);
+    text("선택한 이미지:", leftImgX, 225);
     image(selectedImage, leftImgX, imgY, imgWidth, imgHeight);
   }
   
   // Display the captured image on the right
   if (capturedImage) {
-    text("Captured Face:", rightImgX, 225);
+    text("사용자 정보:", rightImgX, 225);
     image(capturedImage, rightImgX, imgY, imgWidth, imgHeight);
   }
   
@@ -528,18 +528,18 @@ function drawGenerationState() {
   // line(arrowX2 - 15, arrowY + 15, arrowX2, arrowY); // Arrow head bottom
   
   // Show selection data
-  fill(0);
-  noStroke();
-  textSize(18);
-  textAlign(LEFT, TOP);
-  text("Selection Data:", 60, imgY + imgHeight + 30);
+  // fill(0);
+  // noStroke();
+  // textSize(18);
+  // textAlign(LEFT, TOP);
+  // text("Selection Data:", 60, imgY + imgHeight + 30);
   
   // // Show selected image name
   // textSize(16);
   // text(`Selected Image: ${userSelectionData.selectedImage || "None"}`, 60, imgY + imgHeight + 60);
   
   // Show category weights in a table format
-  text("Category Weights:", 60, imgY + imgHeight + 90);
+  text("카테고리별 수치:", 60, imgY + imgHeight + 90);
   
   // Draw table of weights
   let yOffset = imgY + imgHeight + 120;
@@ -547,8 +547,8 @@ function drawGenerationState() {
   // Table headers
   textSize(14);
   textStyle(BOLD);
-  text("Category", 60, yOffset);
-  text("Score", 300, yOffset);
+  text("카테고리", 60, yOffset);
+  text("수치", 300, yOffset);
   yOffset += 25;
   
   // Table divider
@@ -579,17 +579,17 @@ function drawGenerationState() {
   noStroke();
   textAlign(CENTER, TOP);
   textSize(14);
-  text("Thank you for completing the CAPTCHA test", config.canvasWidth/2, config.canvasHeight - 100);
-  text("This receipt serves as proof of your rationality test", config.canvasWidth/2, config.canvasHeight - 80);
+  text("CAPTCHA 테스트를 진행하시느라 수고 많으셨습니다", config.canvasWidth/2, config.canvasHeight - 100);
+  text("이 문서는 이성 진단에 대한 증명서로써 작용합니다", config.canvasWidth/2, config.canvasHeight - 80);
   
   // Add a reset button to restart CAPTCHA
   if (!window.resetButton) {
-    window.resetButton = createButton("New Session");
+    window.resetButton = createButton("처음으로");
   
     // Center the button relative to the canvas width
     window.resetButton.position(
-      width/2 - config.buttonWidth/2,  // Center horizontally on canvas
-      height - config.buttonMargin     // Position from bottom of canvas
+      width/2 - config.buttonWidth/2 + 100,  // Center horizontally on canvas
+      height - config.buttonMargin + 250     // Position from bottom of canvas
     );
   
   window.resetButton.size(config.buttonWidth, config.buttonHeight);
@@ -632,10 +632,10 @@ function centerResetButton() {
   //   );
   // }
   if (window.resetButton && appState === "GENERATION") {
-    console.log("Centering reset button to:", width/2 - config.buttonWidth/2, height - config.buttonMargin);
+    console.log("Centering reset button to:", width/2 - config.buttonWidth/2 + 100, height - config.buttonMargin + 250);
     window.resetButton.position(
-      width/2 - config.buttonWidth/2,
-      height - config.buttonMargin
+      width/2 - config.buttonWidth/2 + 100,
+      height - config.buttonMargin + 250
     );
   }
 }
@@ -666,7 +666,7 @@ function checkStateTransitions() {
 function transitionToRationalTest() {
   appState = "RATIONAL_TEST";
   showingWebcam = true;
-  captchaTitle = "ARE YOU RATIONAL?";
+  captchaTitle = "당신은 이성적입니까?";
   headerColor = [255, 0, 0]; // Change to red
   interactionsLocked = true;
   rationalTestStartTime = millis(); // Record the start time
@@ -925,7 +925,7 @@ function resetCaptcha() {
   selectedImage = null;
 
   // Reset UI elements
-  captchaTitle = "Choose the most rational state";
+  captchaTitle = "다음 중 가장 이성적인 상태를 고르시오";
   headerColor = [100, 100, 100]; // Reset to grey
   interactionsLocked = false;
 
