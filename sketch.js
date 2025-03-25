@@ -100,7 +100,8 @@ function setupWebcam(deviceId = null) {
       facingMode: "user", // Use front camera for face detection
       width: { ideal: 640 },
       height: { ideal: 480 }
-    }
+    },
+    audio: false // Explicitly disable audio/microphone
   };
   
   // Initialize webcam with constraints
@@ -139,27 +140,6 @@ function setup() {
   // Start detecting faces
   faceMesh.detectStart(video, gotFaces);
 
-  let captureButton = createButton("Capture");
-  captureButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, 
-                      config.canvasHeight - config.buttonMargin);
-  captureButton.size(config.buttonWidth, config.buttonHeight);
-  captureButton.style('font-size', config.buttonTextSize + 'px');
-  captureButton.mousePressed(() => {
-    appState = "GENERATION";
-    saveGeneratedResults();
-  });
-  captureButton.id("captureButton");
-  captureButton.style("display", "none");
-
-  // Make all buttons responsive to touch
-  const buttons = selectAll('button');
-  for (let i = 0; i < buttons.length; i++) {
-    buttons[i].elt.addEventListener('touchend', function(e) {
-      e.preventDefault();
-      this.click();  // Trigger the click event
-    });
-  }
-
   // Initialize image selection as before
   initializeImages();
 
@@ -188,6 +168,22 @@ function setup() {
   document.querySelector('canvas').addEventListener('touchstart', function(e) {
     e.preventDefault();
   }, { passive: false });
+}
+
+function touchEnableButton(button) {
+  // Add multiple event listeners to ensure the button works
+  ["touchend", "touchstart", "click"].forEach(function(eventType) {
+    button.elt.addEventListener(eventType, function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log(`${eventType} detected on New session button`);
+      // Call handleReset directly instead of relying on click propagation
+      if (eventType === "touchend" || eventType === "click" || eventType === "touchstart") {
+        handleReset();
+      }
+    });
+  });
+  console.log("Enhanced touch support added to button");
 }
 
 function initializeImages() {
@@ -244,6 +240,12 @@ function draw() {
   } else {
     // In GENERATION state
     drawGenerationState();
+
+    // If we've been in GENERATION state for more than 30 seconds
+    if (window.generationStateStartTime && millis() - window.generationStateStartTime > 10000) {
+      console.log("Failsafe reset triggered after 30 seconds");
+      handleReset();
+    }
   }
 }
 
@@ -338,7 +340,7 @@ function drawCountdownTimer() {
       fill(0);
       textAlign(CENTER, TOP);
       textSize(config.countdownTextSize);
-      text(`Scanning in ${timeLeft}...`, config.canvasWidth / 2, config.canvasHeight - 450);
+      text(`Scanning in ${timeLeft}...`, config.canvasWidth / 2, config.canvasHeight - 450);  
     }
   }
 }
@@ -354,7 +356,7 @@ function drawGenerationState() {
   stroke(0);
   textSize(config.processingTextSize);
   textAlign(CENTER, CENTER);
-  text("Image captured successfully!", config.canvasWidth / 2, config.canvasHeight / 2);
+  text(jsonFilename, config.canvasWidth / 2, config.canvasHeight / 2);
 
   // Add a reset button to restart CAPTCHA
   if (!window.resetButton) {
@@ -363,17 +365,22 @@ function drawGenerationState() {
     window.resetButton.size(config.buttonWidth, config.buttonHeight);
     window.resetButton.style('font-size', config.buttonTextSize + 'px');
     window.resetButton.mousePressed(handleReset);
+
+    // Enable touch support for this button
+    touchEnableButton(window.resetButton);
   }
 }
 
 function handleReset() {
+  console.log("handleReset function called");
   resetCaptcha();
   capturedImage = null;
   
   // Hide generation UI elements
-  document.getElementById("captureButton").style.display = "block";
+  // document.getElementById("captureButton").style.display = "block";
   
   if (window.resetButton) {
+    console.log("Removing reset button");
     window.resetButton.remove();
     window.resetButton = null;
   }
@@ -392,7 +399,7 @@ function checkStateTransitions() {
     faceCaptured = true;
     
     // Show the generate button after capturing
-    document.getElementById("captureButton").style.display = "block";
+    // document.getElementById("captureButton").style.display = "block";
   }
 
   // Get the selected image (if any)
@@ -441,7 +448,8 @@ function captureUserFace() {
   capturedImage.updatePixels();
 
   // Save the captured image for later use in generation
-  capturedImage.save(jsonFilename + '_captured.png'); // Save the captured face image
+  // capturedImage.save(jsonFilename + '_captured.png'); // Save the captured face image
+  console.log("user face data saving disabled");
   
   // We don't save the raw capture directly, we'll save the generated image later
   // console.log("User face captured and ready for generation");
@@ -450,7 +458,9 @@ function captureUserFace() {
   appState = "GENERATION";
 
   // Save results
-  saveGeneratedResults();
+  // saveGeneratedResults();
+  console.log("user data saving disabled");
+
   
   console.log("User face captured and saved");
 }
@@ -598,6 +608,8 @@ function saveGeneratedResults() {
 }
 
 function resetCaptcha() {
+  console.log("resetCaptcha function called");
+
   // Reset to initial state
   appState = "SELECTION";
   
