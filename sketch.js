@@ -449,12 +449,12 @@ function drawSkipButton() {
 function drawCountdownTimer() {
   // Display countdown timer if only one tile is selected
   if (selectionCount === 1 && selectionTime > 0 && !showingWebcam) {
-    let timeLeft = 3 - floor((millis() - selectionTime) / 1000);
+    let timeLeft = 5 - floor((millis() - selectionTime) / 1000);
     if (timeLeft >= 0) {
       fill(0);
-      textAlign(CENTER, TOP);
+      textAlign(CENTER, CENTER);
       textSize(config.countdownTextSize);
-      text(`Scanning in ${timeLeft}...`, config.canvasWidth / 2, config.canvasHeight - 450);  
+      text(`${timeLeft}초 후에 넘어갑니다`, config.canvasWidth / 2, config.canvasHeight - 780);  
     }
   }
 }
@@ -642,7 +642,7 @@ function centerResetButton() {
 
 function checkStateTransitions() {
   // Check if we need to transition states
-  if (appState === "SELECTION" && selectionCount === 1 && selectionTime > 0 && millis() - selectionTime > 3000) {
+  if (appState === "SELECTION" && selectionCount === 1 && selectionTime > 0 && millis() - selectionTime > 5000) {
     transitionToRationalTest();
   }
 
