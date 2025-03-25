@@ -63,6 +63,21 @@ const config = {
   gridLineWeight: 3                         // Thickness of grid lines
 };
 
+// Add to your config object
+config.receipt = {
+  backgroundColor: 255,          // White background
+  textColor: 0,                  // Black text
+  headerSize: 32,                // Header text size
+  subheaderSize: 20,             // Subheader text size
+  bodyTextSize: 16,              // Body text size
+  capturedImageWidth: 300,       // Width of captured image
+  capturedImageHeight: 300,      // Height of captured image
+  lineSpacing: 25,               // Vertical spacing between lines
+  sideMargin: 60,                // Left margin
+  tableWidth: 340,               // Width of table elements
+  footerSize: 14                 // Footer text size
+};
+
 // Compute derived values
 let tileSize;          // Will be calculated in setup()
 let gridOffsetX;       // X position to center the grid
@@ -242,10 +257,10 @@ function draw() {
     drawGenerationState();
 
     // If we've been in GENERATION state for more than 30 seconds
-    if (window.generationStateStartTime && millis() - window.generationStateStartTime > 10000) {
-      console.log("Failsafe reset triggered after 30 seconds");
-      handleReset();
-    }
+    // if (window.generationStateStartTime && millis() - window.generationStateStartTime > 10000) {
+    //   console.log("Failsafe reset triggered after 30 seconds");
+    //   handleReset();
+    // }
   }
 }
 
@@ -346,24 +361,138 @@ function drawCountdownTimer() {
 }
 
 function drawGenerationState() {
-  // In GENERATION state show the captured image and then the result
-  if (capturedImage) {
-    image(capturedImage, 0, 0, config.canvasWidth, config.canvasHeight);
-  }
-
-  // Show completion message
-  fill(255);
+  // Set up the receipt background
+  background(255); // White background for receipt
+  
+  // Add receipt header with decorative elements
+  fill(0);
+  textSize(32);
+  textAlign(CENTER, TOP);
+  text("RATIONAL TEST RESULTS", config.canvasWidth/2, 40);
+  
+  // Add decorative line
   stroke(0);
-  textSize(config.processingTextSize);
-  textAlign(CENTER, CENTER);
-  text(jsonFilename, config.canvasWidth / 2, config.canvasHeight / 2);
-
+  strokeWeight(2);
+  line(50, 85, config.canvasWidth - 50, 85);
+  
+  // Show date and time
+  textSize(16);
+  textAlign(LEFT, TOP);
+  noStroke();
+  let currentDate = new Date();
+  text(`Date: ${currentDate.toLocaleDateString()}`, 60, 100);
+  text(`Time: ${currentDate.toLocaleTimeString()}`, 60, 125);
+  
+  // Show subject ID
+  textSize(20);
+  text(`Subject ID: ${jsonFilename.replace('subject_', '')}`, 60, 160);
+  
+  // Add another decorative line
+  stroke(0);
+  strokeWeight(1);
+  line(50, 190, config.canvasWidth - 50, 190);
+  
+  // // Image comparison section - show both images side by side
+  // noStroke();
+  // fill(0);
+  // textSize(18);
+  // textAlign(LEFT, TOP);
+  // text("Image Comparison:", 60, 210);
+  
+  // Image sizing and positioning
+  let imgWidth = 240;
+  let imgHeight = 240;
+  let leftImgX = 140;
+  let rightImgX = config.canvasWidth - leftImgX - imgWidth;
+  let imgY = 245;
+  
+  // Display the selected image on the left
+  if (selectedImage) {
+    text("Selected Image:", leftImgX, 225);
+    image(selectedImage, leftImgX, imgY, imgWidth, imgHeight);
+  }
+  
+  // Display the captured image on the right
+  if (capturedImage) {
+    text("Captured Face:", rightImgX, 225);
+    image(capturedImage, rightImgX, imgY, imgWidth, imgHeight);
+  }
+  
+  // Add arrow between images to indicate comparison
+  // stroke(0);
+  // strokeWeight(2);
+  // let arrowX1 = leftImgX + imgWidth + 20;
+  // let arrowX2 = rightImgX - 20;
+  // let arrowY = imgY + imgHeight/2;
+  // line(arrowX1, arrowY, arrowX2, arrowY); // Horizontal line
+  // line(arrowX2 - 15, arrowY - 15, arrowX2, arrowY); // Arrow head top
+  // line(arrowX2 - 15, arrowY + 15, arrowX2, arrowY); // Arrow head bottom
+  
+  // Show selection data
+  fill(0);
+  noStroke();
+  textSize(18);
+  textAlign(LEFT, TOP);
+  text("Selection Data:", 60, imgY + imgHeight + 30);
+  
+  // // Show selected image name
+  // textSize(16);
+  // text(`Selected Image: ${userSelectionData.selectedImage || "None"}`, 60, imgY + imgHeight + 60);
+  
+  // Show category weights in a table format
+  text("Category Weights:", 60, imgY + imgHeight + 90);
+  
+  // Draw table of weights
+  let yOffset = imgY + imgHeight + 120;
+  
+  // Table headers
+  textSize(14);
+  textStyle(BOLD);
+  text("Category", 60, yOffset);
+  text("Score", 300, yOffset);
+  yOffset += 25;
+  
+  // Table divider
+  stroke(0);
+  line(60, yOffset-5, 400, yOffset-5);
+  
+  // Table rows
+  noStroke();
+  textStyle(NORMAL);
+  for (let category in scores) {
+    text(category, 60, yOffset);
+    text(scores[category].toFixed(2), 300, yOffset);
+    yOffset += 25;
+  }
+  
+  // Bottom table line
+  stroke(0);
+  line(60, yOffset-5, 400, yOffset-5);
+  
+  // Receipt footer with dotted line
+  stroke(0);
+  strokeWeight(1);
+  drawingContext.setLineDash([5, 5]); // Create dotted line
+  line(50, config.canvasHeight - 120, config.canvasWidth - 50, config.canvasHeight - 120);
+  drawingContext.setLineDash([]); // Reset to solid line
+  
+  // Footer text
+  noStroke();
+  textAlign(CENTER, TOP);
+  textSize(14);
+  text("Thank you for completing the CAPTCHA test", config.canvasWidth/2, config.canvasHeight - 100);
+  text("This receipt serves as proof of your rationality test", config.canvasWidth/2, config.canvasHeight - 80);
+  
   // Add a reset button to restart CAPTCHA
   if (!window.resetButton) {
-    window.resetButton = createButton("New session");
-    window.resetButton.position(config.canvasWidth / 2 - config.buttonWidth / 2, config.canvasHeight - config.buttonMargin);
+    window.resetButton = createButton("New Session");
+    window.resetButton.position(config.canvasWidth/2 - config.buttonWidth/2, config.canvasHeight - config.buttonMargin);
     window.resetButton.size(config.buttonWidth, config.buttonHeight);
     window.resetButton.style('font-size', config.buttonTextSize + 'px');
+    window.resetButton.style('background-color', '#0066cc');
+    window.resetButton.style('color', 'white');
+    window.resetButton.style('border', 'none');
+    window.resetButton.style('border-radius', '5px');
     window.resetButton.mousePressed(handleReset);
 
     // Enable touch support for this button
@@ -449,20 +578,55 @@ function captureUserFace() {
 
   // Save the captured image for later use in generation
   // capturedImage.save(jsonFilename + '_captured.png'); // Save the captured face image
-  console.log("user face data saving disabled");
+  // console.log("user face data saving disabled");
   
   // We don't save the raw capture directly, we'll save the generated image later
   // console.log("User face captured and ready for generation");
 
   // Transition to GENERATION state to display the captured image
   appState = "GENERATION";
+  window.generationStateStartTime = millis();
 
   // Save results
   // saveGeneratedResults();
-  console.log("user data saving disabled");
+  // console.log("user data saving disabled");
 
+  // console.log("User face captured and saved");
+
+  // Generate receipt data
+  prepareReceiptData();
   
-  console.log("User face captured and saved");
+  console.log("User face captured and receipt generated");
+}
+
+function prepareReceiptData() {
+  // Add receipt-specific data to userSelectionData
+  userSelectionData.receiptGenerated = Date.now();
+  // userSelectionData.receiptId = "RC-" + Math.floor(Math.random() * 100000);
+  
+  // Format category data for receipt
+  let categoryData = [];
+  for (let category in scores) {
+    categoryData.push({
+      name: category,
+      score: scores[category].toFixed(2)
+    });
+  }
+  userSelectionData.categoryData = categoryData;
+  
+  // Calculate dominant category
+  let maxScore = -1;
+  let dominantCategory = "None";
+  for (let category in scores) {
+    if (scores[category] > maxScore) {
+      maxScore = scores[category];
+      dominantCategory = category;
+    }
+  }
+  userSelectionData.dominantCategory = dominantCategory;
+  
+  // Save the JSON data with receipt information
+  // saveJSON(userSelectionData, jsonFilename + '.json');
 }
 
 function saveUserSelectionData() {
@@ -518,7 +682,7 @@ function handleInteraction(x, y) {
     y > config.canvasHeight - config.buttonHeight - 20 && 
     y < config.canvasHeight - 20
   ) {
-    console.log("Skip clicked");
+    console.log("Reset clicked");
     resetCaptcha();
     return;
   }
