@@ -78,6 +78,32 @@ config.receipt = {
   footerSize: 14                 // Footer text size
 };
 
+config.responsive = {
+  minWidth: 320,                // Minimum supported width
+  maxWidth: 1920,               // Maximum width to consider
+  minHeight: 480,               // Minimum supported height
+  maxHeight: 1080,              // Maximum height to consider
+  scaleFactor: 0.9,             // Scale canvas to 90% of available space
+  mobileBreakpoint: 768         // Width below which to use mobile layout
+};
+
+config.buttons = {
+  primary: {
+    backgroundColor: '#0066cc',
+    textColor: 'white',
+    borderRadius: '5px',
+    fontWeight: 'bold',
+    border: 'none'
+  },
+  secondary: {
+    backgroundColor: '#666666',
+    textColor: 'white',
+    borderRadius: '5px',
+    fontWeight: 'normal',
+    border: 'none'
+  }
+};
+
 // Compute derived values
 let tileSize;          // Will be calculated in setup()
 let gridOffsetX;       // X position to center the grid
@@ -136,11 +162,11 @@ function setupWebcam(deviceId = null) {
 
 function setup() {
   createCanvas(config.canvasWidth, config.canvasHeight);
-  tileSize = config.canvasWidth * config.tileSizeRatio;
-  let gridWidth = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
-  let gridHeight = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
-  gridOffsetX = (config.canvasWidth - gridWidth) / 2;
-  gridOffsetY = config.headerHeight + (config.canvasHeight - config.headerHeight - gridHeight) / 2;
+  centerCanvas();
+
+  // Set initial tile size and grid positioning
+  updateLayoutDimensions();
+
   pixelDensity(1);  
   
   srcImg = createGraphics(config.canvasWidth, config.canvasHeight);
@@ -162,27 +188,100 @@ function setup() {
   window.addEventListener('resize', function() {
     // Only recreate canvas if significant change in dimensions
     if (Math.abs(windowWidth - width) > 100 || Math.abs(windowHeight - height) > 100) {
-      resizeCanvas(min(windowWidth - 20, config.canvasWidth), 
-                  min(windowHeight - 20, config.canvasHeight));
+      console.log("Significant window resize detected");
       
-      // Recalculate grid positioning
-      tileSize = min(width, height) * config.tileSizeRatio;
-      let gridWidth = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
-      let gridHeight = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
-      gridOffsetX = (width - gridWidth) / 2;
-      gridOffsetY = config.headerHeight + (height - config.headerHeight - gridHeight) / 2;
+      // Get scale based on window size
+      const scale = calculateResponsiveScale();
       
-      // Update video size
-      if (video) {
-        video.size(tileSize, tileSize);
-      }
+      // Calculate new canvas dimensions
+      const newWidth = round(config.canvasWidth * scale);
+      const newHeight = round(config.canvasHeight * scale);
+      
+      // Resize and recenter the canvas
+      resizeCanvas(newWidth, newHeight);
+      centerCanvas();
+      
+      // Update all the layout dimensions
+      updateLayoutDimensions();
+
+      centerResetButton(); 
     }
   });
+
+  // window.addEventListener('resize', function() {
+  //   centerCanvas();
+  //   updateLayoutDimensions();
+  //   centerResetButton(); // Make sure this is here
+  // });
 
   // Prevent default touch behavior on the canvas
   document.querySelector('canvas').addEventListener('touchstart', function(e) {
     e.preventDefault();
   }, { passive: false });
+
+  // Add window resize handler to keep canvas centered
+  window.addEventListener('resize', function() {
+    centerCanvas();
+    updateLayoutDimensions();
+  });
+}
+
+function centerCanvas() {
+  // Get current canvas element
+  let canvas = document.querySelector('canvas');
+  canvas.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+  }, { passive: false });
+  
+  // Set CSS to center it
+  canvas.style.position = 'absolute';
+  canvas.style.left = '50%';
+  canvas.style.top = '50%';
+  canvas.style.transform = 'translate(-50%, -50%)';
+  
+  // Add a container div if needed
+  if (!document.getElementById('canvasContainer')) {
+    let container = document.createElement('div');
+    container.id = 'canvasContainer';
+    container.style.position = 'relative';
+    container.style.width = '100vw';
+    container.style.height = '100vh';
+    
+    // Move canvas into container
+    document.body.appendChild(container);
+    container.appendChild(canvas);
+  }
+}
+
+function updateLayoutDimensions() {
+  tileSize = min(width, height) * config.tileSizeRatio;
+  let gridWidth = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
+  let gridHeight = config.gridSize * tileSize + (config.gridSize - 1) * config.gridSpacing;
+  gridOffsetX = (config.canvasWidth - gridWidth) / 2;
+  gridOffsetY = config.headerHeight + (config.canvasHeight - config.headerHeight - gridHeight) / 2;
+
+  // Update video size if it exists
+  if (video) {
+    video.size(tileSize, tileSize);
+  }
+}
+
+function calculateResponsiveScale() {
+  // Get window dimensions
+  const windowWidth = windowWidth;
+  const windowHeight = windowHeight;
+  
+  // Calculate scale factors for width and height
+  const widthScale = windowWidth / config.canvasWidth;
+  const heightScale = windowHeight / config.canvasHeight;
+  
+  // Use the smaller scale to ensure everything fits
+  let scale = min(widthScale, heightScale) * config.responsive.scaleFactor;
+  
+  // Constrain scale to reasonable bounds
+  scale = constrain(scale, 0.5, 1.5);
+  
+  return scale;
 }
 
 function touchEnableButton(button) {
@@ -486,17 +585,27 @@ function drawGenerationState() {
   // Add a reset button to restart CAPTCHA
   if (!window.resetButton) {
     window.resetButton = createButton("New Session");
-    window.resetButton.position(config.canvasWidth/2 - config.buttonWidth/2, config.canvasHeight - config.buttonMargin);
-    window.resetButton.size(config.buttonWidth, config.buttonHeight);
-    window.resetButton.style('font-size', config.buttonTextSize + 'px');
-    window.resetButton.style('background-color', '#0066cc');
-    window.resetButton.style('color', 'white');
-    window.resetButton.style('border', 'none');
-    window.resetButton.style('border-radius', '5px');
-    window.resetButton.mousePressed(handleReset);
+  
+    // Center the button relative to the canvas width
+    window.resetButton.position(
+      width/2 - config.buttonWidth/2,  // Center horizontally on canvas
+      height - config.buttonMargin     // Position from bottom of canvas
+    );
+  
+  window.resetButton.size(config.buttonWidth, config.buttonHeight);
+  window.resetButton.style('font-size', config.buttonTextSize + 'px');
+  window.resetButton.style('background-color', config.buttons.primary.backgroundColor);
+  window.resetButton.style('color', config.buttons.primary.textColor);
+  window.resetButton.style('border', config.buttons.primary.border);
+  window.resetButton.style('border-radius', config.buttons.primary.borderRadius);
+  window.resetButton.style('font-weight', config.buttons.primary.fontWeight);
+  window.resetButton.mousePressed(handleReset);
 
-    // Enable touch support for this button
-    touchEnableButton(window.resetButton);
+  // Enable touch support for this button
+  touchEnableButton(window.resetButton);
+  
+  // Add resize handler to keep button centered when window resizes
+  window.addEventListener('resize', centerResetButton);
   }
 }
 
@@ -512,6 +621,22 @@ function handleReset() {
     console.log("Removing reset button");
     window.resetButton.remove();
     window.resetButton = null;
+  }
+}
+
+function centerResetButton() {
+  // if (window.resetButton && appState === "GENERATION") {
+  //   window.resetButton.position(
+  //     width/2 - config.buttonWidth/2,  // Center horizontally on canvas
+  //     height - config.buttonMargin     // Position from bottom of canvas
+  //   );
+  // }
+  if (window.resetButton && appState === "GENERATION") {
+    console.log("Centering reset button to:", width/2 - config.buttonWidth/2, height - config.buttonMargin);
+    window.resetButton.position(
+      width/2 - config.buttonWidth/2,
+      height - config.buttonMargin
+    );
   }
 }
 
