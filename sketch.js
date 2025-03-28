@@ -475,16 +475,18 @@ function drawGenerationState() {
   line(50, 85, config.canvasWidth - 50, 85);
   
   // Show date and time
-  textSize(16);
+  textSize(20);
   textAlign(LEFT, TOP);
   noStroke();
   let currentDate = new Date();
-  text(`날짜: ${currentDate.toLocaleDateString()}`, 60, 100);
-  text(`시간: ${currentDate.toLocaleTimeString()}`, 60, 125);
+  text(`날짜: ${currentDate.toLocaleDateString()}`, 60, 110);
+  text(`시간: ${currentDate.toLocaleTimeString()}`, 60, 140);
   
-  // Show subject ID
-  textSize(20);
-  text(`사용자 ID: ${jsonFilename.replace('subject_', '')}`, 60, 160);
+  // Show subject ID aligned to the right
+  textSize(40);
+  textAlign(RIGHT, TOP);
+  noStroke();
+  text(`사용자 ID: ${jsonFilename.replace('subject_', '')}`, config.canvasWidth - 60, 115);
   
   // Add another decorative line
   stroke(0);
@@ -505,6 +507,10 @@ function drawGenerationState() {
   let rightImgX = config.canvasWidth - leftImgX - imgWidth;
   let imgY = 245;
   
+  textSize(20);
+  textAlign(LEFT, TOP);
+  noStroke();
+
   // Display the selected image on the left
   if (selectedImage) {
     text("선택한 이미지:", leftImgX, 225);
@@ -539,34 +545,39 @@ function drawGenerationState() {
   // text(`Selected Image: ${userSelectionData.selectedImage || "None"}`, 60, imgY + imgHeight + 60);
   
   // Show category weights in a table format
-  text("카테고리별 수치:", 60, imgY + imgHeight + 90);
+  // text("카테고리별 수치:", config.canvasWidth / 2, imgY + imgHeight + 90);
   
   // Draw table of weights
-  let yOffset = imgY + imgHeight + 120;
+  let tableWidth = 450; // Increase table width by 1.5 times
+  let tableX = (config.canvasWidth - tableWidth) / 2; // Center table horizontally
+  let yOffset = imgY + imgHeight + 90; // Pull everything up by 30 on the y-axis
   
   // Table headers
-  textSize(14);
+  textSize(20); // Increase text size to 20
   textStyle(BOLD);
-  text("카테고리", 60, yOffset);
-  text("수치", 300, yOffset);
-  yOffset += 25;
+  textAlign(LEFT, TOP);
+  text("카테고리", tableX, yOffset);
+  text("수치", tableX + tableWidth - 150, yOffset); // Adjust for increased table width
+  yOffset += 37.5; // Increase spacing by 1.5 times
   
   // Table divider
   stroke(0);
-  line(60, yOffset-5, 400, yOffset-5);
+  line(tableX, yOffset - 7.5, tableX + tableWidth, yOffset - 7.5); // Adjust for increased spacing
   
   // Table rows
   noStroke();
   textStyle(NORMAL);
   for (let category in scores) {
-    text(category, 60, yOffset);
-    text(scores[category].toFixed(2), 300, yOffset);
-    yOffset += 25;
+    text(category, tableX, yOffset);
+    text(scores[category].toFixed(2), tableX + tableWidth - 150, yOffset); // Adjust for increased table width
+    yOffset += 37.5; // Increase spacing by 1.5 times
   }
   
   // Bottom table line
   stroke(0);
-  line(60, yOffset-5, 400, yOffset-5);
+  let tableLineX1 = (config.canvasWidth - tableWidth) / 2; // Center align the line
+  let tableLineX2 = tableLineX1 + tableWidth;
+  line(tableLineX1, yOffset - 7.5, tableLineX2, yOffset - 7.5); // Adjust for increased spacing
   
   // Receipt footer with dotted line
   stroke(0);
