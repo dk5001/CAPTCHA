@@ -324,7 +324,7 @@ function initializeImages() {
 }
 
 function draw() {
-  background(220);
+  background(0);
 
   // Only show CAPTCHA if we're not in GENERATION state
   if (appState !== "GENERATION") {
@@ -356,10 +356,10 @@ function draw() {
     drawGenerationState();
 
     // If we've been in GENERATION state for more than 30 seconds
-    // if (window.generationStateStartTime && millis() - window.generationStateStartTime > 10000) {
-    //   console.log("Failsafe reset triggered after 30 seconds");
-    //   handleReset();
-    // }
+    if (window.generationStateStartTime && millis() - window.generationStateStartTime > 60000) {
+      console.log("Failsafe reset triggered after 30 seconds");
+      handleReset();
+    }
   }
 }
 
@@ -674,7 +674,7 @@ function transitionToRationalTest() {
   console.log("Transitioning to rational test");
 
   // Create a unique filename base to use for both JSON and image
-  jsonFilename = 'subject_' + Date.now();
+  jsonFilename = 'subject_' + Math.floor(100000 + Math.random() * 900000);
   
   // Save the JSON data immediately
   saveUserSelectionData();
