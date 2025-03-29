@@ -119,9 +119,9 @@ config.language = {
     },
     ENG: {
       captchaTitle: "Select the most rational state",
-      rationalTestTitle: "Are you rational?",
+      rationalTestTitle: "ARE YOU RATIONAL?",
       generationTitle: "Test Results",
-      skipButton: "Skip",
+      skipButton: "Shuffle",
       countdownText: "seconds left to proceed",
       receiptFooter1: "Thank you for completing the CAPTCHA test",
       receiptFooter2: "This document serves as proof of rationality assessment",
@@ -579,7 +579,7 @@ function drawSkipButton() {
     config.buttonWidth, config.buttonHeight, 10);
   fill(255);
   textAlign(config.buttonTextSize);
-  text("건너뛰기", config.canvasWidth - config.buttonWidth / 2 - 20, 
+  text(config.language.options[config.language.current].skipButton, config.canvasWidth - config.buttonWidth / 2 - 20, 
     config.canvasHeight - config.buttonHeight / 2 - 35);
 }
 
@@ -936,8 +936,17 @@ function mousePressed() {
 function touchStarted() {
   // Check if there are any touches
   if (touches.length > 0) {
-    // Use the first touch point's coordinates
-    handleInteraction(touches[0].x, touches[0].y);
+    switch (appState) {
+      case "LANGUAGE":
+        handleLanguageSelection(touches[0].x, touches[0].y);
+        break;
+      case "CHECKBOX":
+        handleCheckboxClick(touches[0].x, touches[0].y);
+        break;
+      case "SELECTION":
+        handleInteraction(touches[0].x, touches[0].y);
+        break;
+    }
   }
   // Prevent default behavior (scrolling, zooming)
   return false;
@@ -956,8 +965,7 @@ function handleInteraction(x, y) {
     y > config.canvasHeight - config.buttonHeight - 20 && 
     y < config.canvasHeight - 20
   ) {
-    console.log("Reset clicked");
-    resetCaptcha();
+    shuffleImages();
     return;
   }
 
@@ -1080,7 +1088,9 @@ function resetCaptcha() {
   captchaTitle = "다음 중 가장 이성적인 상태를 고르시오";
   headerColor = [100, 100, 100]; // Reset to grey
   interactionsLocked = false;
+}
 
+function shuffleImages() {
   // Reshuffle images for new CAPTCHA
   let shuffledIndices = shuffle([...Array(tileImages.length).keys()]);
   displayedImages = shuffledIndices.slice(0, gridSize * gridSize).map(i => tileImages[i]);
