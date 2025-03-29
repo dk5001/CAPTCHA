@@ -10,7 +10,8 @@ let scores = { "Calm/Neutral": 0, "Confident/Positive": 0, "Chaotic/Negative": 0
 let weights; // Object to store the weights from JSON file
 
 // Application state variables
-let appState = "SELECTION"; // Can be "SELECTION", "RATIONAL_TEST" or "GENERATION"
+let appState = "LANGUAGE";
+let checkboxChecked = false;
 let captchaTitle = "다음 중 가장 이성적인 상태를 고르시오";
 let headerColor = [100, 100, 100]; // Initial gray color for header
 let interactionsLocked = false; // Flag to lock interactions
@@ -33,7 +34,6 @@ let rationalTestStartTime = 0;  // When the RATIONAL_TEST state began
 let faceCaptured = false;       // Flag to ensure we only capture once
 let jsonFilename = "";          // Store filename to use for both JSON and image
 let capturedImage = null;       // The captured face image
-
 // Configuration object for easily adjusting the interface
 const config = {
   // Canvas and layout
@@ -104,6 +104,40 @@ config.buttons = {
   }
 };
 
+config.language = {
+  current: "KOR", // Default language
+  options: {
+    KOR: {
+      captchaTitle: "다음 중 가장 이성적인 상태를 고르시오",
+      rationalTestTitle: "당신은 이성적입니까?",
+      generationTitle: "검사 결과",
+      skipButton: "건너뛰기",
+      countdownText: "초 후에 넘어갑니다",
+      receiptFooter1: "CAPTCHA 테스트를 진행하시느라 수고 많으셨습니다",
+      receiptFooter2: "이 문서는 이성 진단에 대한 증명서로써 작용합니다",
+      languageButton: "Language / 언어"
+    },
+    ENG: {
+      captchaTitle: "Select the most rational state",
+      rationalTestTitle: "Are you rational?",
+      generationTitle: "Test Results",
+      skipButton: "Skip",
+      countdownText: "seconds left to proceed",
+      receiptFooter1: "Thank you for completing the CAPTCHA test",
+      receiptFooter2: "This document serves as proof of rationality assessment",
+      languageButton: "Language / 언어"
+    }
+  }
+};
+
+config.checkbox = {
+  text: {
+    KOR: "동의합니다",
+    ENG: "I Agree"
+  },
+  waitTime: 3000 // 3 seconds
+};
+
 // Compute derived values
 let tileSize;          // Will be calculated in setup()
 let gridOffsetX;       // X position to center the grid
@@ -135,8 +169,6 @@ function gotFaces(results) {
 function setupWebcam(deviceId = null) {
   // If a specific deviceId is provided, use that camera
   const constraints = {
-    // video: deviceId ? { deviceId: { exact: deviceId } } : true,
-    // flipped: true
     video: {
       facingMode: "user", // Use front camera for face detection
       width: { ideal: 640 },
@@ -150,9 +182,6 @@ function setupWebcam(deviceId = null) {
   
   video.size(tileSize, tileSize);
   video.hide(); // Hide the default video element
-
-  // Start detecting faces
-  // faceMesh.detectStart(video, gotFaces);
   
   // Start detecting faces after webcam is loaded
   video.elt.onloadedmetadata = function() {
@@ -170,11 +199,6 @@ function setup() {
   pixelDensity(1);  
   
   srcImg = createGraphics(config.canvasWidth, config.canvasHeight);
-
-  // Initialize webcam
-  // video = createCapture(VIDEO, { flipped: true });
-  // video.size(tileSize, tileSize);
-  // video.hide(); // Hide the default video element
 
   setupWebcam();
 
@@ -208,12 +232,6 @@ function setup() {
     }
   });
 
-  // window.addEventListener('resize', function() {
-  //   centerCanvas();
-  //   updateLayoutDimensions();
-  //   centerResetButton(); // Make sure this is here
-  // });
-
   // Prevent default touch behavior on the canvas
   document.querySelector('canvas').addEventListener('touchstart', function(e) {
     e.preventDefault();
@@ -224,6 +242,86 @@ function setup() {
     centerCanvas();
     updateLayoutDimensions();
   });
+}
+
+function drawLanguageSelection() {
+  background(255);
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  fill(0);
+  text(config.language.options[config.language.current].languageButton, width / 2, height / 4);
+
+  // Draw language buttons
+  let buttonWidth = 150;
+  let buttonHeight = 50;
+  let buttonSpacing = 20;
+
+  let korButtonX = width / 2 - buttonWidth - buttonSpacing / 2;
+  let engButtonX = width / 2 + buttonSpacing / 2;
+
+  drawButton(korButtonX, height / 2, buttonWidth, buttonHeight, "KOR");
+  drawButton(engButtonX, height / 2, buttonWidth, buttonHeight, "ENG");
+}
+
+function drawButton(x, y, w, h, lang) {
+  fill(200);
+  rect(x, y, w, h, 10);
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(18);
+  text(lang, x + w / 2, y + h / 2);
+}
+
+function handleLanguageSelection(x, y) {
+  let buttonWidth = 150;
+  let buttonHeight = 50;
+  let buttonSpacing = 20;
+
+  let korButtonX = width / 2 - buttonWidth - buttonSpacing / 2;
+  let engButtonX = width / 2 + buttonSpacing / 2;
+
+  if (x > korButtonX && x < korButtonX + buttonWidth && y > height / 2 && y < height / 2 + buttonHeight) {
+    config.language.current = "KOR";
+    appState = "CHECKBOX";
+  } else if (x > engButtonX && x < engButtonX + buttonWidth && y > height / 2 && y < height / 2 + buttonHeight) {
+    config.language.current = "ENG";
+    appState = "CHECKBOX";
+  }
+}
+
+function drawCheckbox() {
+  background(255);
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  fill(0);
+  text(config.checkbox.text[config.language.current], width / 2, height / 3);
+
+  let checkboxSize = 30;
+  let checkboxX = width / 2 - checkboxSize / 2;
+  let checkboxY = height / 2;
+
+  fill(200);
+  rect(checkboxX, checkboxY, checkboxSize, checkboxSize);
+
+  if (checkboxChecked) {
+    fill(0);
+    rect(checkboxX + 5, checkboxY + 5, checkboxSize - 10, checkboxSize - 10);
+  }
+}
+
+function handleCheckboxClick(x, y) {
+  let checkboxSize = 30;
+  let checkboxX = width / 2 - checkboxSize / 2;
+  let checkboxY = height / 2;
+
+  if (x > checkboxX && x < checkboxX + checkboxSize && y > checkboxY && y < checkboxY + checkboxSize) {
+    checkboxChecked = !checkboxChecked;
+    if (checkboxChecked) {
+      setTimeout(() => {
+        appState = "SELECTION";
+      }, config.checkbox.waitTime);
+    }
+  }
 }
 
 function centerCanvas() {
@@ -324,43 +422,82 @@ function initializeImages() {
 }
 
 function draw() {
-  background(0);
-
-  // Only show CAPTCHA if we're not in GENERATION state
-  if (appState !== "GENERATION") {
-    // Draw header
-    fill(headerColor[0], headerColor[1], headerColor[2]);
-    rect(0, 0, config.canvasWidth, config.headerHeight);
-
-    // Draw captcha instructions
-    fill(255);
-    textSize(config.headerTextSize);
-    textAlign(CENTER, TOP);
-    text(captchaTitle, config.canvasWidth / 2, 40);
-
-    // Handle state transitions
-    checkStateTransitions();
-
-    // Draw grid based on current state
-    drawGrid();
-    
-    // Draw skip button (only in selection state)
-    if (appState === "SELECTION" && !interactionsLocked) {
-      drawSkipButton();
-    }
-
-    // Display countdown timer if only one tile is selected
-    drawCountdownTimer();
-  } else {
-    // In GENERATION state
-    drawGenerationState();
+  switch (appState) {
+    case "LANGUAGE":
+      drawLanguageSelection();
+      break;
+    case "CHECKBOX":
+      drawCheckbox();
+      break;
+    case "SELECTION":
+      drawSelection();
+      break;
+    case "RATIONAL_TEST":
+      drawRationalTest();
+      break;
+    case "GENERATION":
+      drawGenerationState();
 
     // If we've been in GENERATION state for more than 30 seconds
     if (window.generationStateStartTime && millis() - window.generationStateStartTime > 60000) {
-      console.log("Failsafe reset triggered after 30 seconds");
+      console.log("Failsafe reset triggered after 60 seconds");
       handleReset();
     }
+    break;
   }
+}
+
+function drawSelection() {
+  captchaTitle = config.language.options[config.language.current].captchaTitle;
+  
+  background(0);
+
+  // Draw header
+  fill(headerColor[0], headerColor[1], headerColor[2]);
+  rect(0, 0, config.canvasWidth, config.headerHeight);
+
+  // Draw captcha instructions
+  fill(255);
+  textSize(config.headerTextSize);
+  textAlign(CENTER, TOP);
+  text(captchaTitle, config.canvasWidth / 2, 65);
+
+  // Handle state transitions
+  checkStateTransitions();
+
+  // Draw grid based on current state
+  drawGrid();
+  
+  // Draw skip button (only in selection state)
+  if (appState === "SELECTION" && !interactionsLocked) {
+    drawSkipButton();
+  }
+
+  // Display countdown timer if only one tile is selected
+  drawCountdownTimer();
+}
+
+function drawRationalTest() {
+  captchaTitle = config.language.options[config.language.current].rationalTestTitle;
+
+  background(0);
+
+  // Draw header
+  fill(headerColor[0], headerColor[1], headerColor[2]);
+  rect(0, 0, config.canvasWidth, config.headerHeight);
+
+  // Draw rational test instructions
+  fill(255);
+  textSize(config.headerTextSize);
+  textAlign(CENTER, TOP);
+  text(captchaTitle, config.canvasWidth / 2, 65);
+
+  // Draw grid
+  drawGrid();
+
+  // console.log("Capturing user face...");
+  //   captureUserFace();
+  //   faceCaptured = true; 
 }
 
 function drawGrid() {
@@ -460,6 +597,14 @@ function drawCountdownTimer() {
 }
 
 function drawGenerationState() {
+  let lang = config.language.current;
+  let texts = config.language.options[lang];
+
+  // Use texts for generation state
+  text(texts.generationTitle, config.canvasWidth / 2, 40);
+  text(texts.receiptFooter1, config.canvasWidth / 2, config.canvasHeight - 100);
+  text(texts.receiptFooter2, config.canvasWidth / 2, config.canvasHeight - 80);
+
   // Set up the receipt background
   background(255); // White background for receipt
   
@@ -493,13 +638,6 @@ function drawGenerationState() {
   strokeWeight(1);
   line(50, 190, config.canvasWidth - 50, 190);
   
-  // // Image comparison section - show both images side by side
-  // noStroke();
-  // fill(0);
-  // textSize(18);
-  // textAlign(LEFT, TOP);
-  // text("Image Comparison:", 60, 210);
-  
   // Image sizing and positioning
   let imgWidth = 240;
   let imgHeight = 240;
@@ -520,32 +658,12 @@ function drawGenerationState() {
   // Display the captured image on the right
   if (capturedImage) {
     text("사용자 정보:", rightImgX, 225);
-    image(capturedImage, rightImgX, imgY, imgWidth, imgHeight);
+    push();
+    translate(rightImgX + imgWidth, imgY); // Move to the right edge of the image
+    scale(-1, 1); // Flip horizontally
+    image(capturedImage, 0, 0, imgWidth, imgHeight); // Draw the flipped image
+    pop();
   }
-  
-  // Add arrow between images to indicate comparison
-  // stroke(0);
-  // strokeWeight(2);
-  // let arrowX1 = leftImgX + imgWidth + 20;
-  // let arrowX2 = rightImgX - 20;
-  // let arrowY = imgY + imgHeight/2;
-  // line(arrowX1, arrowY, arrowX2, arrowY); // Horizontal line
-  // line(arrowX2 - 15, arrowY - 15, arrowX2, arrowY); // Arrow head top
-  // line(arrowX2 - 15, arrowY + 15, arrowX2, arrowY); // Arrow head bottom
-  
-  // Show selection data
-  // fill(0);
-  // noStroke();
-  // textSize(18);
-  // textAlign(LEFT, TOP);
-  // text("Selection Data:", 60, imgY + imgHeight + 30);
-  
-  // // Show selected image name
-  // textSize(16);
-  // text(`Selected Image: ${userSelectionData.selectedImage || "None"}`, 60, imgY + imgHeight + 60);
-  
-  // Show category weights in a table format
-  // text("카테고리별 수치:", config.canvasWidth / 2, imgY + imgHeight + 90);
   
   // Draw table of weights
   let tableWidth = 450; // Increase table width by 1.5 times
@@ -652,20 +770,23 @@ function centerResetButton() {
 }
 
 function checkStateTransitions() {
+  // console.log("appState:", appState);
+  // console.log("faceCaptured:", faceCaptured);
+  // console.log("rationalTestStartTime:", rationalTestStartTime);
+  // console.log("Time since RATIONAL_TEST started:", millis() - rationalTestStartTime);
+
   // Check if we need to transition states
-  if (appState === "SELECTION" && selectionCount === 1 && selectionTime > 0 && millis() - selectionTime > 5000) {
+  if (appState === "SELECTION" && selectionCount === 1 && selectionTime > 0 && millis() - selectionTime > 1000) {
     transitionToRationalTest();
   }
 
   // Check if we should capture the webcam image (3 seconds after RATIONAL_TEST begins)
-  if (appState === "RATIONAL_TEST" && !faceCaptured && 
-      rationalTestStartTime > 0 && millis() - rationalTestStartTime > 3000) {
-    captureUserFace();
-    faceCaptured = true;
-    
-    // Show the generate button after capturing
-    // document.getElementById("captureButton").style.display = "block";
-  }
+  // if (appState === "RATIONAL_TEST" && !faceCaptured && 
+  //     rationalTestStartTime > 0 && millis() - rationalTestStartTime > 1000) {
+  //   console.log("Capturing user face...");
+  //   captureUserFace();
+  //   faceCaptured = true; 
+  // }
 
   // Get the selected image (if any)
   if (selectionCount === 1 && selectedCol >= 0 && selectedRow >= 0) {
@@ -677,18 +798,26 @@ function checkStateTransitions() {
 function transitionToRationalTest() {
   appState = "RATIONAL_TEST";
   showingWebcam = true;
-  captchaTitle = "당신은 이성적입니까?";
-  headerColor = [255, 0, 0]; // Change to red
+  captchaTitle = config.language.options[config.language.current].rationalTestTitle;
+  headerColor = config.rationalTestHeaderColor
   interactionsLocked = true;
   rationalTestStartTime = millis(); // Record the start time
   faceCaptured = false; // Reset face capture flag
-  console.log("Transitioning to rational test");
+  console.log("Transitioned to RATIONAL_TEST at", rationalTestStartTime);
 
-  // Create a unique filename base to use for both JSON and image
+  setTimeout(() => {
+    if (appState === "RATIONAL_TEST" && !faceCaptured) {
+      console.log("Capturing user face...");
+      captureUserFace();
+      faceCaptured = true;
+    }
+  }, 3000); // 3-second delay
+
+  // Create a unique filename base 
   jsonFilename = 'subject_' + Math.floor(100000 + Math.random() * 900000);
   
   // Save the JSON data immediately
-  saveUserSelectionData();
+  // saveUserSelectionData();
 }
 
 function captureUserFace() {
@@ -727,7 +856,7 @@ function captureUserFace() {
   // saveGeneratedResults();
   // console.log("user data saving disabled");
 
-  // console.log("User face captured and saved");
+  console.log("User face captured and saved");
 
   // Generate receipt data
   prepareReceiptData();
@@ -791,8 +920,17 @@ function saveUserSelectionData() {
 }
 
 function mousePressed() {
-  // Call shared handler with mouse coordinates
-  handleInteraction(mouseX, mouseY);
+  switch (appState) {
+    case "LANGUAGE":
+      handleLanguageSelection(mouseX, mouseY);
+      break;
+    case "CHECKBOX":
+      handleCheckboxClick(mouseX, mouseY);
+      break;
+    case "SELECTION":
+      handleInteraction(mouseX, mouseY);
+      break;
+  }
 }
 
 function touchStarted() {
@@ -911,7 +1049,7 @@ function resetCaptcha() {
   console.log("resetCaptcha function called");
 
   // Reset to initial state
-  appState = "SELECTION";
+  appState = "LANGUAGE";
   
   // Reset selections
   for (let i = 0; i < gridSize; i++) {
@@ -934,6 +1072,9 @@ function resetCaptcha() {
   selectedCol = -1;
   selectedRow = -1;
   selectedImage = null;
+
+  // Reset checkbox state
+  checkboxChecked = false;
 
   // Reset UI elements
   captchaTitle = "다음 중 가장 이성적인 상태를 고르시오";
