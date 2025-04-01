@@ -113,19 +113,37 @@ config.language = {
       generationTitle: "검사 결과",
       skipButton: "건너뛰기",
       countdownText: "초 후에 넘어갑니다",
+      receiptHeader: "검사 결과",
+      testDate: "날짜: ",
+      testTime: "시간: ",
+      userId: "사용자 ID: ",
+      selectedImage: "선택한 이미지: ",
+      userInfo: "사용자 정보: ",
+      receiptCategory: "카테고리",
+      receiptScore: "수치",
       receiptFooter1: "CAPTCHA 테스트를 진행하시느라 수고 많으셨습니다",
       receiptFooter2: "이 문서는 이성 진단에 대한 증명서로써 작용합니다",
-      languageButton: "Language / 언어"
+      languageButton: "Language / 언어",
+      resetButton: "처음으로"
     },
     ENG: {
       captchaTitle: "Select the most rational state",
       rationalTestTitle: "ARE YOU RATIONAL?",
       generationTitle: "Test Results",
       skipButton: "Shuffle",
-      countdownText: "seconds left to proceed",
+      countdownText: "seconds left",
+      receiptHeader: "Test Results",
+      testDate: "Date: ",
+      testTime: "Time: ",
+      userId: "User ID: ",
+      selectedImage: "Selected Image: ",
+      userInfo: "User Info: ",
+      receiptCategory: "Category",
+      receiptScore: "Score",
       receiptFooter1: "Thank you for completing the CAPTCHA test",
       receiptFooter2: "This document serves as proof of rationality assessment",
-      languageButton: "Language / 언어"
+      languageButton: "Language / 언어", 
+      resetButton: "Start Over"
     }
   }
 };
@@ -586,12 +604,16 @@ function drawSkipButton() {
 function drawCountdownTimer() {
   // Display countdown timer if only one tile is selected
   if (selectionCount === 1 && selectionTime > 0 && !showingWebcam) {
-    let timeLeft = 5 - floor((millis() - selectionTime) / 1000);
+    let timeLeft = 3 - floor((millis() - selectionTime) / 3000);
     if (timeLeft >= 0) {
       fill(0);
       textAlign(CENTER, CENTER);
       textSize(config.countdownTextSize);
-      text(`${timeLeft}초 후에 넘어갑니다`, config.canvasWidth / 2, config.canvasHeight - 780);  
+      let timeElapsed = floor((millis() - selectionTime) / 1000);
+      let timeLeft = 3 - timeElapsed;
+      if (timeLeft >= 0) {
+        text(`${timeLeft} ${config.language.options[config.language.current].countdownText}`, config.canvasWidth / 2, config.canvasHeight - 780);
+      }
     }
   }
 }
@@ -612,7 +634,7 @@ function drawGenerationState() {
   fill(0);
   textSize(32);
   textAlign(CENTER, TOP);
-  text("검사 결과", config.canvasWidth/2, 40);
+  text(texts.receiptHeader, config.canvasWidth/2, 40);
   
   // Add decorative line
   stroke(0);
@@ -624,14 +646,17 @@ function drawGenerationState() {
   textAlign(LEFT, TOP);
   noStroke();
   let currentDate = new Date();
-  text(`날짜: ${currentDate.toLocaleDateString()}`, 60, 110);
-  text(`시간: ${currentDate.toLocaleTimeString()}`, 60, 140);
+  text(`${config.language.options[config.language.current].testDate}${currentDate.toLocaleDateString()}`, 60, 110);
+  if (!window.displayedTime) {
+    window.displayedTime = currentDate.toLocaleTimeString();
+  }
+  text(`${config.language.options[config.language.current].testTime}${window.displayedTime}`, 60, 140);
   
   // Show subject ID aligned to the right
   textSize(40);
   textAlign(RIGHT, TOP);
   noStroke();
-  text(`사용자 ID: ${jsonFilename.replace('subject_', '')}`, config.canvasWidth - 60, 115);
+  text(`${config.language.options[config.language.current].userId}${jsonFilename.replace('subject_', '')}`, config.canvasWidth - 60, 115);
   
   // Add another decorative line
   stroke(0);
@@ -651,13 +676,13 @@ function drawGenerationState() {
 
   // Display the selected image on the left
   if (selectedImage) {
-    text("선택한 이미지:", leftImgX, 225);
+    text(texts.selectedImage, leftImgX, 225);
     image(selectedImage, leftImgX, imgY, imgWidth, imgHeight);
   }
   
   // Display the captured image on the right
   if (capturedImage) {
-    text("사용자 정보:", rightImgX, 225);
+    text(texts.userInfo, rightImgX, 225);
     push();
     translate(rightImgX + imgWidth, imgY); // Move to the right edge of the image
     scale(-1, 1); // Flip horizontally
@@ -674,8 +699,8 @@ function drawGenerationState() {
   textSize(20); // Increase text size to 20
   textStyle(BOLD);
   textAlign(LEFT, TOP);
-  text("카테고리", tableX, yOffset);
-  text("수치", tableX + tableWidth - 150, yOffset); // Adjust for increased table width
+  text(texts.receiptCategory, tableX, yOffset);
+  text(texts.receiptScore, tableX + tableWidth - 150, yOffset); // Adjust for increased table width
   yOffset += 37.5; // Increase spacing by 1.5 times
   
   // Table divider
@@ -708,12 +733,12 @@ function drawGenerationState() {
   noStroke();
   textAlign(CENTER, TOP);
   textSize(14);
-  text("CAPTCHA 테스트를 진행하시느라 수고 많으셨습니다", config.canvasWidth/2, config.canvasHeight - 100);
-  text("이 문서는 이성 진단에 대한 증명서로써 작용합니다", config.canvasWidth/2, config.canvasHeight - 80);
+  text(texts.receiptFooter1, config.canvasWidth/2, config.canvasHeight - 100);
+  text(texts.receiptFooter2, config.canvasWidth/2, config.canvasHeight - 80);
   
   // Add a reset button to restart CAPTCHA
   if (!window.resetButton) {
-    window.resetButton = createButton("처음으로");
+    window.resetButton = createButton(texts.resetButton);
   
     // Center the button relative to the canvas width
     window.resetButton.position(
@@ -776,7 +801,7 @@ function checkStateTransitions() {
   // console.log("Time since RATIONAL_TEST started:", millis() - rationalTestStartTime);
 
   // Check if we need to transition states
-  if (appState === "SELECTION" && selectionCount === 1 && selectionTime > 0 && millis() - selectionTime > 1000) {
+  if (appState === "SELECTION" && selectionCount === 1 && selectionTime > 0 && millis() - selectionTime > 3000) {
     transitionToRationalTest();
   }
 
