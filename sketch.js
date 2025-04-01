@@ -150,10 +150,10 @@ config.language = {
 
 config.checkbox = {
   text: {
-    KOR: "동의합니다",
-    ENG: "I Agree"
+    KOR: "당신은 이성적입니까?",
+    ENG: "ARE YOU RATIONAL?"
   },
-  waitTime: 3000 // 3 seconds
+  waitTime: 2000 // 3 seconds
 };
 
 // Compute derived values
@@ -167,6 +167,8 @@ function preload() {
 
   // Load FaceMesh model
   faceMesh = ml5.faceMesh({ maxFaces: 1, flipped: true });
+
+  window.cogIcon = loadImage('cog.png');
 
   // Dynamically load all images with two-digit padding in the folder
   for (let i = 1; i <= 15; i++) {
@@ -308,31 +310,88 @@ function handleLanguageSelection(x, y) {
 }
 
 function drawCheckbox() {
-  background(255);
-  textAlign(CENTER, CENTER);
+  background(0);
+
+  if (!window.cogIcon) {
+    window.cogIcon = loadImage('cog.png');
+  }
+  
+  // Calculate rectangle dimensions and position
+  let boxHeight = 120;
+  let boxWidth = 480;
+  let boxX = width / 2 - boxWidth / 2;
+  let boxY = height / 2 - boxHeight / 2;
+  
+  // Calculate positions for checkbox and text
+  let checkboxSize = 30;
+  let checkboxX = boxX + 20; // Left side of box + margin
+  let checkboxY = boxY + (boxHeight - checkboxSize) / 2; // Centered vertically in box
+  let textX = checkboxX + checkboxSize + 40; // Right of checkbox + margin
+  let textY = boxY + boxHeight / 2; // Centered vertically in box
+
+  // Cog icon dimensions and position
+  let cogSize = 100; // Size of the cog icon
+  let cogX = boxX + boxWidth - cogSize - 20; // Right side of box - icon size - margin
+  let cogY = boxY + (boxHeight - cogSize) / 2; // Centered vertically in box
+  
+  // Draw the containing rectangle with black outline
+  stroke(0);
+  strokeWeight(2);
+  fill(240); // Light gray fill
+  rect(boxX, boxY, boxWidth, boxHeight, 10); // Rounded corners with 10px radius
+  
+  // Draw text
+  noStroke();
+  textAlign(LEFT, CENTER);
   textSize(24);
   fill(0);
-  text(config.checkbox.text[config.language.current], width / 2, height / 3);
+  text(config.checkbox.text[config.language.current], textX, textY);
 
-  let checkboxSize = 30;
-  let checkboxX = width / 2 - checkboxSize / 2;
-  let checkboxY = height / 2;
-
-  fill(200);
+  if (window.cogIcon) {
+    image(window.cogIcon, cogX, cogY, cogSize, cogSize);
+  }
+  
+  // Draw checkbox with black outline
+  stroke(0);
+  strokeWeight(2);
+  fill(0); // Gray fill for checkbox
   rect(checkboxX, checkboxY, checkboxSize, checkboxSize);
-
+  
+  // Draw checkmark if checked
   if (checkboxChecked) {
-    fill(0);
+    noStroke();
+    let alpha = 200 + 100 * sin(millis() / 100);
+    fill(255, alpha); // Black fill for checkmark
     rect(checkboxX + 5, checkboxY + 5, checkboxSize - 10, checkboxSize - 10);
   }
 }
 
 function handleCheckboxClick(x, y) {
+  // Calculate rectangle dimensions and position (same as in drawCheckbox)
+  let boxHeight = 120;
+  let boxWidth = 480;
+  let boxX = width / 2 - boxWidth / 2;
+  let boxY = height / 2 - boxHeight / 2;
+  
+  // Calculate positions for checkbox (same as in drawCheckbox)
   let checkboxSize = 30;
-  let checkboxX = width / 2 - checkboxSize / 2;
-  let checkboxY = height / 2;
-
-  if (x > checkboxX && x < checkboxX + checkboxSize && y > checkboxY && y < checkboxY + checkboxSize) {
+  let checkboxX = boxX + 20;
+  let checkboxY = boxY + (boxHeight - checkboxSize) / 2;
+  
+  // Check if click was inside the checkbox
+  if (x > checkboxX && x < checkboxX + checkboxSize && 
+      y > checkboxY && y < checkboxY + checkboxSize) {
+    checkboxChecked = !checkboxChecked;
+    if (checkboxChecked) {
+      setTimeout(() => {
+        appState = "SELECTION";
+      }, config.checkbox.waitTime);
+    }
+  }
+  
+  // Also allow clicking anywhere in the rectangle to check the box
+  else if (x > boxX && x < boxX + boxWidth && 
+           y > boxY && y < boxY + boxHeight) {
     checkboxChecked = !checkboxChecked;
     if (checkboxChecked) {
       setTimeout(() => {
