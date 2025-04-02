@@ -117,6 +117,8 @@ config.language = {
       testDate: "날짜: ",
       testTime: "시간: ",
       userId: "사용자 ID: ",
+      guideSentence1: "당신은 아직 충분히 이성적이지 않습니다.",
+      guideSentence2: "사용자 ID 6자리를 가지고 CLINIC 섹션으로 이동하십시오.",
       selectedImage: "선택한 이미지: ",
       userInfo: "사용자 정보: ",
       receiptCategory: "카테고리",
@@ -136,6 +138,8 @@ config.language = {
       testDate: "Date: ",
       testTime: "Time: ",
       userId: "User ID: ",
+      guideSentence1: "Your are not rational enough yet.",
+      guideSentence2: "Please proceed to the CLINIC section with your 6-digit User ID.",
       selectedImage: "Selected Image: ",
       userInfo: "User Info: ",
       receiptCategory: "Category",
@@ -499,6 +503,8 @@ function initializeImages() {
 }
 
 function draw() {
+  // drawGenerationState();
+
   switch (appState) {
     case "LANGUAGE":
       drawLanguageSelection();
@@ -713,35 +719,53 @@ function drawGenerationState() {
   
   // Show subject ID aligned to the right
   textSize(40);
+  fill(255, 0, 0);
   textAlign(RIGHT, TOP);
   noStroke();
   text(`${config.language.options[config.language.current].userId}${jsonFilename.replace('subject_', '')}`, config.canvasWidth - 60, 115);
   
+  textSize(25);
+  fill(0, 0, 255);
+  textAlign(CENTER, TOP);
+  text(texts.guideSentence1, config.canvasWidth/2, 200);
+  text(texts.guideSentence2, config.canvasWidth/2, 240);
+  
   // Add another decorative line
   stroke(0);
-  strokeWeight(1);
-  line(50, 190, config.canvasWidth - 50, 190);
+  strokeWeight(2);
+  line(50, 290, config.canvasWidth - 50, 290);
   
   // Image sizing and positioning
   let imgWidth = 240;
   let imgHeight = 240;
   let leftImgX = 140;
   let rightImgX = config.canvasWidth - leftImgX - imgWidth;
-  let imgY = 245;
+  let imgY = 350; // Y position for images
   
   textSize(20);
+  fill(0)
   textAlign(LEFT, TOP);
   noStroke();
 
+  // text(texts.selectedImage, leftImgX, 320);
+  //   image(selectedImage, leftImgX, imgY, imgWidth, imgHeight);
+
+  //   text(texts.userInfo, rightImgX, 245);
+  //   push();
+  //   translate(rightImgX + imgWidth, imgY); // Move to the right edge of the image
+  //   scale(-1, 1); // Flip horizontally
+  //   image(capturedImage, 0, 0, imgWidth, imgHeight); // Draw the flipped image
+  //   pop();
+
   // Display the selected image on the left
   if (selectedImage) {
-    text(texts.selectedImage, leftImgX, 225);
+    text(texts.selectedImage, leftImgX, 320);
     image(selectedImage, leftImgX, imgY, imgWidth, imgHeight);
   }
   
   // Display the captured image on the right
   if (capturedImage) {
-    text(texts.userInfo, rightImgX, 225);
+    text(texts.userInfo, rightImgX, 320);
     push();
     translate(rightImgX + imgWidth, imgY); // Move to the right edge of the image
     scale(-1, 1); // Flip horizontally
@@ -752,7 +776,7 @@ function drawGenerationState() {
   // Draw table of weights
   let tableWidth = 450; // Increase table width by 1.5 times
   let tableX = (config.canvasWidth - tableWidth) / 2; // Center table horizontally
-  let yOffset = imgY + imgHeight + 90; // Pull everything up by 30 on the y-axis
+  let yOffset = imgY + imgHeight + 30; // Pull everything up by 30 on the y-axis
   
   // Table headers
   textSize(20); // Increase text size to 20
@@ -782,11 +806,11 @@ function drawGenerationState() {
   line(tableLineX1, yOffset - 7.5, tableLineX2, yOffset - 7.5); // Adjust for increased spacing
   
   // Receipt footer with dotted line
-  stroke(0);
-  strokeWeight(1);
-  drawingContext.setLineDash([5, 5]); // Create dotted line
-  line(50, config.canvasHeight - 120, config.canvasWidth - 50, config.canvasHeight - 120);
-  drawingContext.setLineDash([]); // Reset to solid line
+  // stroke(0);
+  // strokeWeight(1);
+  // drawingContext.setLineDash([5, 5]); // Create dotted line
+  // line(50, config.canvasHeight - 120, config.canvasWidth - 50, config.canvasHeight - 120);
+  // drawingContext.setLineDash([]); // Reset to solid line
   
   // Footer text
   noStroke();
