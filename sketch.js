@@ -177,7 +177,7 @@ let gridOffsetY;       // Y position to place the grid below header
 
 function preload() {
   // Load ComfyUI workflow
-  workflow = loadJSON("latent_face_morph_workflow_API.json");
+  workflow = loadJSON("latent_face_morph_workflow_controlNet_API.json");
 
   // Load CAPTCHA weights and images
   weights = loadJSON('weights.json');
