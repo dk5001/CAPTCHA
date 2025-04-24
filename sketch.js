@@ -1,5 +1,10 @@
 // CAPTCHA interface variables
+let workflow;
+let comfy;
+let bg;
+let ipAdapter;
 let srcImg;
+let resImg;
 let gridSize = 3; // Number of rows and columns
 let selectedTiles = []; // Array to store selected tiles
 let tileImages = []; // Array to store the loaded images
@@ -171,6 +176,9 @@ let gridOffsetX;       // X position to center the grid
 let gridOffsetY;       // Y position to place the grid below header
 
 function preload() {
+  // Load ComfyUI workflow
+  workflow = loadJSON("latent_face_morph_workflow_API.json");
+
   // Load CAPTCHA weights and images
   weights = loadJSON('weights.json');
 
@@ -228,6 +236,9 @@ function setup() {
   pixelDensity(1);  
   
   srcImg = createGraphics(config.canvasWidth, config.canvasHeight);
+
+  comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");  // for ComfyUI Web
+  console.log("workflow is", workflow);
 
   setupWebcam();
 
@@ -692,6 +703,10 @@ function drawGenerationState() {
   let lang = config.language.current;
   let texts = config.language.options[lang];
 
+  if (resImg) {
+    image(resImg, 0, 0, config.canvasWidth, config.canvasHeight);
+  }
+
   // Use texts for generation state
   text(texts.generationTitle, config.canvasWidth / 2, 40);
   text(texts.receiptFooter1, config.canvasWidth / 2, config.canvasHeight - 100);
@@ -855,6 +870,7 @@ function handleReset() {
   console.log("handleReset function called");
   resetCaptcha();
   capturedImage = null;
+  resImg = null;
   
   // Hide generation UI elements
   // document.getElementById("captureButton").style.display = "block";
@@ -969,7 +985,11 @@ function captureUserFace() {
   // saveGeneratedResults();
   // console.log("user data saving disabled");
 
+  bg = capturedImage;
+
   console.log("User face captured and saved");
+
+  requestImage();
 
   // Generate receipt data
   prepareReceiptData();
@@ -1153,6 +1173,34 @@ function updateScores(col, row) {
   }
 }
 
+function requestImage() {
+  if (!bg) {
+    console.error("No background image available");
+    return;
+  }
+  
+  // Prepare source image for generation
+  srcImg.image(capturedImage, 0, 0, config.canvasWidth, config.canvasHeight);
+
+  // replace the LoadImage node with our source image
+  workflow[1] = comfy.image(srcImg);
+
+  workflow[2] = comfy.image(selectedImage);
+
+  comfy.run(workflow, gotImage);
+}
+
+function gotImage(results, err) {
+  console.log("gotImage", results);
+
+  if (results.length > 0) {
+    resImg = loadImage(results[0].src, () => {
+      // After loading the result image, save both the result and the JSON data
+      saveGeneratedResults();
+    });
+  }
+}
+
 function saveGeneratedResults() {
   // Update JSON data with the filename
   userSelectionData.generatedImage = jsonFilename + '.png';
@@ -1161,7 +1209,7 @@ function saveGeneratedResults() {
   saveJSON(userSelectionData, jsonFilename + '.json');
   
   // Save the generated image
-  // resImg.save(jsonFilename + '.png');
+  resImg.save(jsonFilename + '.png');
   
   console.log("Save complete - saved image and data:", jsonFilename);
 }
