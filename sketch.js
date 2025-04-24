@@ -34,6 +34,11 @@ let rationalTestStartTime = 0;  // When the RATIONAL_TEST state began
 let faceCaptured = false;       // Flag to ensure we only capture once
 let jsonFilename = "";          // Store filename to use for both JSON and image
 let capturedImage = null;       // The captured face image
+
+let imgbbApiKey = "YOUR_IMGBB_API_KEY"; // Replace with your ImgBB API key
+let resultImageUrl = null;
+let qrCodeGenerated = false;
+
 // Configuration object for easily adjusting the interface
 const config = {
   // Canvas and layout
