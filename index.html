@@ -178,7 +178,7 @@
         <div class="checkbox-container">
           <div class="checkbox-wrapper">
             <div class="checkbox" id="rational-checkbox"></div>
-            <div class="checkbox-text">ARE YOU RATIONAL?</div>
+            <div class="checkbox-text">Want to see your face?</div>
           </div>
           <img src="cog.png" class="cog-icon" alt="Cog icon">
         </div>
@@ -187,7 +187,7 @@
       <!-- Grid Interface -->
       <div id="grid-interface">
         <div class="header">
-          <div class="header-text">Select the most rational state</div>
+          <div class="header-text">Choose one face that resonates</div>
         </div>
         <div class="countdown" id="countdown"></div>
         <div class="grid-container" id="grid-container">
@@ -565,6 +565,8 @@
             // Replace the LoadImage node with our source image
             workflow[1] = comfy.image(srcImg);
             workflow[2] = comfy.image(p5SelectedImage);
+            workflow[6].inputs.seed = Math.floor(Math.random() * 1e15);
+            debug("Generated random seed: " + workflow[6].inputs.seed);
             
             debug("Running ComfyUI workflow");
             comfy.run(workflow, gotImage);
@@ -614,7 +616,7 @@
         
         // Set up receipt content
         receiptContainer.innerHTML = `
-          <h1 style="margin-bottom: 20px;">Test Results</h1>
+          <h1 style="margin-bottom: 20px;">GENERATION RESULTS</h1>
           
           <div style="width: 100%; display: flex; justify-content: space-between; margin-bottom: 20px;">
             <div>
@@ -648,8 +650,8 @@
           </div>
           
           <div style="margin-top: 30px; text-align: center;">
-            <p>Thank you for completing the CAPTCHA test</p>
-            <p>This document serves as proof of rationality assessment</p>
+            <p>Thank you for contributing to our collective face</p>
+            <p>This project is constantly evolving to reflect our unconsciousness and biases</p>
             <button id="reset-button" style="
               background-color: #0066cc;
               color: white;

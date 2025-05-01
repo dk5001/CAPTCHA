@@ -71,9 +71,9 @@
   "6": {
     "inputs": {
       "seed": 193479465183582,
-      "steps": 20,
+      "steps": 10,
       "cfg": 6,
-      "sampler_name": "euler",
+      "sampler_name": "dpmpp_sde_gpu",
       "scheduler": "normal",
       "denoise": 0.65,
       "model": [
