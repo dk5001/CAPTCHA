@@ -4,27 +4,508 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.10.0/p5.js"></script>
     <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
     <script src="p5.comfyui-helper.js"></script>
-    <link rel="stylesheet" type="text/css" href="style.css">
     <meta charset="utf-8" />
-    <title>CAPTCHA 2.0</title>
-  </head>
-  <body>
-    <main>
-    </main>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <script src="sketch.js"></script>
+    <title>CAPTCHA 2.0</title>
     <style>
       body {
         margin: 0;
         padding: 0;
-        overflow: hidden; /* Prevent scrollbars */
+        overflow: hidden;
         width: 100%;
         height: 100vh;
         display: flex;
         justify-content: center;
         align-items: center;
-        background-color: #000000; /* background */
+        background-color: #000000;
+        font-family: Arial, sans-serif;
+      }
+
+      #interface-container {
+        position: relative;
+        width: 800px;
+        height: 900px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      /* Checkbox Interface */
+      #checkbox-interface {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+      }
+
+      .checkbox-container {
+        width: 480px;
+        height: 120px;
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+      }
+
+      .checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        flex: 1;
+      }
+
+      .checkbox {
+        width: 30px;
+        height: 30px;
+        border: 2px solid #000;
+        background-color: #000;
+        margin-right: 40px;
+        position: relative;
+        cursor: pointer;
+      }
+
+      .checkbox.checked::after {
+        content: "";
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        width: 20px;
+        height: 20px;
+        background-color: #fff;
+      }
+
+      .checkbox-text {
+        font-size: 24px;
+        color: #000;
+      }
+
+      .cog-icon {
+        width: 100px;
+        height: 100px;
+        margin-left: auto;
+      }
+
+      /* Grid Interface */
+      #grid-interface {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .header {
+        width: 100%;
+        height: 160px;
+        background-color: #646464;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 40px;
+      }
+
+      .header-text {
+        color: white;
+        font-size: 36px;
+        text-align: center;
+      }
+
+      .grid-container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+
+      .grid-item {
+        width: 200px;
+        height: 200px;
+        border: 3px solid white;
+        cursor: pointer;
+        position: relative;
+      }
+
+      .grid-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .grid-item.selected::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(100, 0, 0, 0.4);
+      }
+
+      .shuffle-button {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background-color: rgba(10, 10, 10, 0.6);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 25px;
+        cursor: pointer;
+      }
+
+      .countdown {
+        position: absolute;
+        top: 180px;
+        width: 100%;
+        text-align: center;
+        color: black;
+        font-size: 24px;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+
+      .countdown.visible {
+        opacity: 1;
       }
     </style>
+  </head>
+  <body>
+    <div id="interface-container">
+      <!-- Checkbox Interface -->
+      <div id="checkbox-interface">
+        <div class="checkbox-container">
+          <div class="checkbox-wrapper">
+            <div class="checkbox" id="rational-checkbox"></div>
+            <div class="checkbox-text">ARE YOU RATIONAL?</div>
+          </div>
+          <img src="cog.png" class="cog-icon" alt="Cog icon">
+        </div>
+      </div>
+
+      <!-- Grid Interface -->
+      <div id="grid-interface">
+        <div class="header">
+          <div class="header-text">Select the most rational state</div>
+        </div>
+        <div class="countdown" id="countdown"></div>
+        <div class="grid-container" id="grid-container">
+          <!-- Grid items will be added dynamically -->
+        </div>
+        <div class="shuffle-button" id="shuffle-button">Shuffle</div>
+      </div>
+    </div>
+
+    <!-- <script>
+      // Replace the entire script section at the bottom of your file -->
+
+    <script>
+      // Configuration
+      const config = {
+        gridSize: 3,
+        imageCount: 15, // Total number of available images
+        checkboxWaitTime: 1000, // 1 second wait time
+        countdownDuration: 3000, // 3 seconds countdown
+      };
+
+      // State
+      let selectedTile = null;
+      let countdownTimer = null;
+      let selectionTime = 0;
+      let images = [];
+      let displayedImages = [];
+      let video;
+      let capturedImage = null;
+      
+      // Debug function to help troubleshoot
+      function debug(message) {
+        console.log(`DEBUG: ${message}`);
+      }
+      
+      // Load all images
+      function preloadImages() {
+        debug("Preloading images");
+        for (let i = 1; i <= config.imageCount; i++) {
+          let paddedIndex = String(i).padStart(2, '0');
+          let imgPath = `images/img${paddedIndex}.png`;
+          images.push(imgPath);
+        }
+        debug(`Preloaded ${images.length} images`);
+      }
+      
+      // Initialize the grid with random images
+      function initializeGrid() {
+        debug("Initializing grid");
+        const gridContainer = document.getElementById('grid-container');
+        gridContainer.innerHTML = '';
+        
+        // Shuffle the images array and take the first 9
+        displayedImages = shuffleArray([...images]).slice(0, config.gridSize * config.gridSize);
+        
+        // Create grid items
+        for (let i = 0; i < displayedImages.length; i++) {
+          const gridItem = document.createElement('div');
+          gridItem.className = 'grid-item';
+          gridItem.dataset.index = i;
+          
+          const img = document.createElement('img');
+          img.src = displayedImages[i];
+          img.alt = `Image ${i+1}`;
+          
+          gridItem.appendChild(img);
+          gridContainer.appendChild(gridItem);
+          
+          // Add click event
+          gridItem.addEventListener('click', handleTileClick);
+        }
+        debug("Grid initialized with images");
+      }
+
+      function initWebcam() {
+        debug("Initializing webcam");
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices.getUserMedia({ video: true })
+            .then(function(stream) {
+              debug("Webcam access granted");
+                video = document.createElement('video');
+                video.srcObject = stream;
+                video.autoplay = true;
+                video.muted = true;
+                video.style.transform = 'scaleX(-1)'; // Mirror the webcam
+
+                // Apply CSS filter to make the video black and white
+                video.style.filter = 'grayscale(100%)';
+              
+              // Ensure video is ready to use
+              video.addEventListener('loadedmetadata', function() {
+                debug("Video metadata loaded");
+                video.play().catch(e => debug("Video play error: " + e.message));
+              });
+            })
+            .catch(function(error) {
+              debug("Error accessing webcam: " + error.message);
+            });
+        } else {
+          debug("MediaDevices not supported in this browser");
+        }
+      }
+      
+      // Shuffle array using Fisher-Yates algorithm
+      function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      }
+      
+      // Handle tile click
+      function handleTileClick(event) {
+        debug("Tile clicked");
+        const allTiles = document.querySelectorAll('.grid-item');
+        const clickedTile = event.currentTarget;
+        
+        // If the clicked tile is already selected, deselect it
+        if (clickedTile.classList.contains('selected')) {
+          debug("Deselecting tile");
+          clickedTile.classList.remove('selected');
+          clickedTile.classList.remove('webcam-active');
+
+          // Remove webcam if it exists
+          const videoElement = clickedTile.querySelector('video');
+          if (videoElement) {
+            videoElement.remove();
+          }
+          
+          selectedTile = null;
+          clearCountdown();
+          return;
+        }
+
+        // Deselect all tiles first
+        allTiles.forEach(tile => {
+          tile.classList.remove('selected');
+          tile.classList.remove('webcam-active');
+
+          // Remove any existing webcam elements
+          const videoElement = tile.querySelector('video');
+          if (videoElement) {
+            videoElement.remove();
+          }
+        });
+        
+        // Select the clicked tile
+        debug("Selecting new tile");
+        clickedTile.classList.add('selected');
+        selectedTile = clickedTile;
+        
+        // Start countdown
+        startCountdown(clickedTile);
+      }
+      
+      // Start countdown timer
+      function startCountdown(selectedTile) {
+        debug("Starting countdown");
+        const countdownElement = document.getElementById('countdown');
+        countdownElement.classList.add('visible');
+        
+        selectionTime = Date.now();
+        clearInterval(countdownTimer);
+        
+        countdownTimer = setInterval(() => {
+          const elapsed = Date.now() - selectionTime;
+          const timeLeft = Math.max(0, Math.floor((config.countdownDuration - elapsed) / 1000));
+          
+          countdownElement.textContent = `${timeLeft} seconds left`;
+          debug(`Countdown: ${timeLeft}s left`);
+          
+          // At 1 second into the countdown (2 seconds left), show webcam
+          if (elapsed >= 1000 && !selectedTile.classList.contains('webcam-active')) {
+            debug("Activating webcam in tile");
+            selectedTile.classList.add('webcam-active');
+            
+            // Add webcam to the selected tile
+            if (video) {
+              debug("Adding video element to tile");
+              const videoClone = video.cloneNode(true);
+              videoClone.srcObject = video.srcObject;
+              videoClone.style.display = "block";
+              videoClone.style.width = "100%";
+              videoClone.style.height = "100%";
+              videoClone.style.objectFit = "cover";
+              videoClone.style.transform = "scaleX(-1)";
+              videoClone.autoplay = true;
+              videoClone.muted = true;
+              videoClone.play().catch(e => debug("Video clone play error: " + e.message));
+
+              selectedTile.querySelector('img').style.display = "none";
+              selectedTile.appendChild(videoClone);
+            } else {
+              debug("Video element not available");
+            }
+          }
+          
+          if (timeLeft <= 0) {
+            debug("Countdown finished");
+            clearInterval(countdownTimer);
+            captureImage(selectedTile);
+          }
+        }, 100);
+      }
+
+      // Capture image from webcam
+      function captureImage(selectedTile) {
+        debug("Capturing image");
+        
+        if (!video || !video.srcObject) {
+          debug("Video not available for capture");
+          return;
+        }
+        
+        // Create a canvas to capture the webcam image
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        try {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          
+          debug(`Canvas created: ${canvas.width} x ${canvas.height}`);
+          
+          // Draw the video frame to the canvas (flipped horizontally)
+          context.translate(canvas.width, 0);
+          context.scale(-1, 1);
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          // Convert to black and white
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+          
+          for (let i = 0; i < data.length; i += 4) {
+            const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            data[i] = gray;
+            data[i + 1] = gray;
+            data[i + 2] = gray;
+          }
+          
+          context.putImageData(imageData, 0, 0);
+          
+          // Create an image from the canvas
+          const capturedImage = new Image();
+          capturedImage.src = canvas.toDataURL('image/png');
+          capturedImage.style.width = "100%";
+          capturedImage.style.height = "100%";
+          capturedImage.style.objectFit = "cover";
+          
+          // Replace the video with the captured image
+          const videoElement = selectedTile.querySelector('video');
+          if (videoElement) {
+            videoElement.remove();
+          }
+          
+          // Remove original image
+          const originalImage = selectedTile.querySelector('img');
+          if (originalImage) {
+            originalImage.remove();
+          }
+          
+          selectedTile.appendChild(capturedImage);
+          selectedTile.classList.remove('webcam-active');
+          
+          debug("Image captured and displayed");
+          
+          // Here you would proceed to the next state
+          setTimeout(() => {
+            alert("Face captured! In the full implementation, this would transition to the RATIONAL_TEST state.");
+          }, 1000);
+          
+        } catch (e) {
+          debug("Error during image capture: " + e.message);
+        }
+      }
+      
+      // Clear countdown timer
+      function clearCountdown() {
+        clearInterval(countdownTimer);
+        const countdownElement = document.getElementById('countdown');
+        countdownElement.classList.remove('visible');
+      }
+      
+      // Initialize application
+      function init() {
+        debug("Initializing application");
+        preloadImages();
+        initializeGrid();
+        initWebcam();
+        
+        // Handle checkbox click
+        document.getElementById('rational-checkbox').addEventListener('click', function() {
+          debug("Checkbox clicked");
+          this.classList.add('checked');
+          
+          // Wait for specified time before showing grid interface
+          setTimeout(() => {
+            debug("Transitioning to grid interface");
+            document.getElementById('checkbox-interface').style.display = 'none';
+            document.getElementById('grid-interface').style.display = 'flex';
+          }, config.checkboxWaitTime);
+        });
+        
+        // Handle shuffle button click
+        document.getElementById('shuffle-button').addEventListener('click', function() {
+          debug("Shuffle button clicked");
+          // Clear any selected tile and countdown
+          selectedTile = null;
+          clearCountdown();
+          
+          // Reinitialize grid
+          initializeGrid();
+        });
+      }
+      
+      // Start the application when DOM is loaded
+      document.addEventListener('DOMContentLoaded', init);
+    </script>
   </body>
 </html>

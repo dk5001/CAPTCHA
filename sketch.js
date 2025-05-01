@@ -127,8 +127,6 @@ config.language = {
       testDate: "날짜: ",
       testTime: "시간: ",
       userId: "사용자 ID: ",
-      guideSentence1: "당신은 아직 충분히 이성적이지 않습니다.",
-      guideSentence2: "사용자 ID 6자리를 가지고 CLINIC 섹션으로 이동하십시오.",
       selectedImage: "선택한 이미지: ",
       userInfo: "사용자 정보: ",
       receiptCategory: "카테고리",
@@ -148,8 +146,6 @@ config.language = {
       testDate: "Date: ",
       testTime: "Time: ",
       userId: "User ID: ",
-      guideSentence1: "Your are not rational enough yet.",
-      guideSentence2: "Please proceed to the CLINIC section with your 6-digit User ID.",
       selectedImage: "Selected Image: ",
       userInfo: "User Info: ",
       receiptCategory: "Category",
@@ -744,53 +740,43 @@ function drawGenerationState() {
   noStroke();
   text(`${config.language.options[config.language.current].userId}${jsonFilename.replace('subject_', '')}`, config.canvasWidth - 60, 115);
   
-  textSize(25);
-  fill(0, 0, 255);
-  textAlign(CENTER, TOP);
-  text(texts.guideSentence1, config.canvasWidth/2, 200);
-  text(texts.guideSentence2, config.canvasWidth/2, 240);
-  
   // Add another decorative line
   stroke(0);
   strokeWeight(2);
-  line(50, 290, config.canvasWidth - 50, 290);
+  line(50, 180, config.canvasWidth - 50, 180);
   
   // Image sizing and positioning
   let imgWidth = 240;
   let imgHeight = 240;
   let leftImgX = 140;
   let rightImgX = config.canvasWidth - leftImgX - imgWidth;
-  let imgY = 350; // Y position for images
+  let imgY = 260; // Y position for images
   
   textSize(20);
   fill(0)
   textAlign(LEFT, TOP);
   noStroke();
 
-  // text(texts.selectedImage, leftImgX, 320);
-  //   image(selectedImage, leftImgX, imgY, imgWidth, imgHeight);
-
-  //   text(texts.userInfo, rightImgX, 245);
-  //   push();
-  //   translate(rightImgX + imgWidth, imgY); // Move to the right edge of the image
-  //   scale(-1, 1); // Flip horizontally
-  //   image(capturedImage, 0, 0, imgWidth, imgHeight); // Draw the flipped image
-  //   pop();
-
   // Display the selected image on the left
   if (selectedImage) {
-    text(texts.selectedImage, leftImgX, 320);
+    text(texts.selectedImage, leftImgX, 230);
     image(selectedImage, leftImgX, imgY, imgWidth, imgHeight);
   }
   
   // Display the captured image on the right
   if (capturedImage) {
-    text(texts.userInfo, rightImgX, 320);
+    text(texts.userInfo, rightImgX, 230);
     push();
     translate(rightImgX + imgWidth, imgY); // Move to the right edge of the image
     scale(-1, 1); // Flip horizontally
     image(capturedImage, 0, 0, imgWidth, imgHeight); // Draw the flipped image
     pop();
+  }
+
+  // Display the generated image (resImg) on the right if available
+  if (resImg) {
+    text("Generated Image:", rightImgX, imgY + imgHeight + 20);
+    image(resImg, rightImgX, imgY + imgHeight + 50, imgWidth, imgHeight);
   }
   
   // Draw table of weights
