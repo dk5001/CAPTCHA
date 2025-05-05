@@ -204,7 +204,7 @@
       // Configuration
       const config = {
         gridSize: 3,
-        imageCount: 15, // Total number of available images
+        imageCount: 9, // Total number of available images
         checkboxWaitTime: 1000, // 1 second wait time
         countdownDuration: 3000, // 3 seconds countdown
       };
@@ -253,6 +253,7 @@
           const img = document.createElement('img');
           img.src = displayedImages[i];
           img.alt = `Image ${i+1}`;
+          img.style.filter = 'grayscale(100%)'; // Apply black and white filter
           
           gridItem.appendChild(img);
           gridContainer.appendChild(gridItem);
