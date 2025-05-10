@@ -153,6 +153,21 @@
         padding: 10px 20px;
         border-radius: 25px;
         cursor: pointer;
+        border: 2px solid #646464;
+        outline: 2px solid white;
+      }
+
+      .back-button {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        background-color: rgba(10, 10, 10, 0.6);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 25px;
+        cursor: pointer;
+        border: 2px solid #646464;
+        outline: 2px solid white;
       }
 
       .countdown {
@@ -194,6 +209,7 @@
           <!-- Grid items will be added dynamically -->
         </div>
         <div class="shuffle-button" id="shuffle-button">Shuffle</div>
+        <div class="back-button" id="back-button">Back</div>
       </div>
     </div>
 
@@ -205,11 +221,11 @@
       const config = {
         gridSize: 3,
         imageCount: 9, // Total number of available images
-        checkboxWaitTime: 1000, // 1 second wait time
+        checkboxWaitTime: 1500, // 1 second wait time
         countdownDuration: 3000, // 3 seconds countdown
       };
 
-      // State
+      // State variables
       let selectedTile = null;
       let countdownTimer = null;
       let selectionTime = 0;
@@ -218,6 +234,7 @@
       let video;
       let capturedImage = null;
       let p5Instance;
+      let lastGeneratedImageUrl = null;
       
       // Debug function to help troubleshoot
       function debug(message) {
@@ -472,6 +489,59 @@
         }
       }
 
+      function startPulseAnimation() {
+            const selectedGlow = document.getElementById('selected-img-glow');
+            const capturedGlow = document.getElementById('captured-img-glow');
+            const statusMsg = document.getElementById('generation-status');
+            
+            let startTime = Date.now();
+            let animationFrame;
+            let dotCount = 0;
+            let statusMessages = [
+              'Analyzing facial features',
+              'Extracting key points',
+              'Generating latent space',
+              'Blending face attributes',
+              'Applying style transfer',
+              'Rendering final image'
+            ];
+            let currentMsgIndex = 0;
+            
+            function updatePulse() {
+              const elapsed = Date.now() - startTime;
+              
+              // Create a sine wave with period of 2 seconds
+              const intensity = Math.sin(elapsed / 2000 * Math.PI) * 0.5 + 0.5;
+              
+              // Apply different phases to each glow
+              selectedGlow.style.backgroundColor = `rgba(255, 0, 0, ${intensity * 0.4})`;
+              capturedGlow.style.backgroundColor = `rgba(255, 0, 0, ${intensity * 0.4})`;
+              
+              // Update the status message every 3 seconds
+              if (elapsed % 3000 < 100 && elapsed > 100) {
+                currentMsgIndex = (currentMsgIndex + 1) % statusMessages.length;
+                dotCount = 0;
+              }
+              
+              // Update the dots every 500ms
+              if (elapsed % 500 < 100) {
+                dotCount = (dotCount + 1) % 4;
+              }
+              
+              // Update status message
+              statusMsg.textContent = statusMessages[currentMsgIndex] + '.'.repeat(dotCount);
+              
+              // Continue animation
+              animationFrame = requestAnimationFrame(updatePulse);
+            }
+            
+            // Start the animation
+            animationFrame = requestAnimationFrame(updatePulse);
+            
+            // Store the animation frame ID for later cleanup
+            window.pulseAnimationFrame = animationFrame;
+          }
+
       // Create receipt interface and p5 instance
       function createReceiptInterface(capturedImage, selectedImageSrc) {
         debug("Creating receipt interface");
@@ -495,10 +565,90 @@
         // Add loading message
         const loadingMsg = document.createElement('div');
         loadingMsg.innerHTML = `
-          <h2>Processing Your Images</h2>
-          <p>Please wait while we generate your results...</p>
+          <h2 style="margin-bottom: 30px;">Processing Your Images</h2>
+          <p style="margin-bottom: 40px;">Please wait while we generate your results...</p>
         `;
         receiptContainer.appendChild(loadingMsg);
+        
+        // Add container for the pulsing images
+        const imagesContainer = document.createElement('div');
+        imagesContainer.id = 'loading-images-container';
+        imagesContainer.style.display = 'flex';
+        imagesContainer.style.justifyContent = 'center';
+        imagesContainer.style.gap = '40px';
+        imagesContainer.style.marginTop = '20px';
+
+        // Add selected image
+        const selectedImgContainer = document.createElement('div');
+        selectedImgContainer.innerHTML = `
+          <h3 style="text-align: center; margin-bottom: 10px;">Selected Face</h3>
+          <div id="selected-img-pulse" style="
+            width: 240px;
+            height: 240px;
+            position: relative;
+            border: 1px solid #ccc;
+          ">
+            <img src="${selectedImageSrc}" style="
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+              position: relative;
+              z-index: 1;
+            ">
+            <div id="selected-img-glow" style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background-color: rgba(255, 0, 0, 0);
+              z-index: 2;
+              pointer-events: none;
+            "></div>
+          </div>
+        `;
+        
+        // Add captured image
+        const capturedImgContainer = document.createElement('div');
+        capturedImgContainer.innerHTML = `
+          <h3 style="text-align: center; margin-bottom: 10px;">Your Face</h3>
+          <div id="captured-img-pulse" style="
+            width: 240px;
+            height: 240px;
+            position: relative;
+            border: 1px solid #ccc;
+          ">
+            <img src="${capturedImage.src}" style="
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+              position: relative;
+              z-index: 1;
+            ">
+            <div id="captured-img-glow" style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background-color: rgba(255, 0, 0, 0);
+              z-index: 2;
+              pointer-events: none;
+            "></div>
+          </div>
+        `;
+
+        imagesContainer.appendChild(selectedImgContainer);
+        imagesContainer.appendChild(capturedImgContainer);
+        receiptContainer.appendChild(imagesContainer);
+        
+        // Add a status message that will update
+        const statusMsg = document.createElement('div');
+        statusMsg.id = 'generation-status';
+        statusMsg.style.marginTop = '40px';
+        statusMsg.style.fontStyle = 'italic';
+        statusMsg.textContent = 'Initializing generation...';
+        receiptContainer.appendChild(statusMsg);
         
         document.getElementById('interface-container').appendChild(receiptContainer);
         
@@ -507,6 +657,9 @@
         p5Container.id = 'p5-container';
         p5Container.style.display = 'none';
         document.body.appendChild(p5Container);
+
+        // Start the pulsing animation
+        startPulseAnimation();
         
         // Create p5 instance with a sketch function that bridges to sketch.js
         p5Instance = new p5(function(p) {
@@ -557,6 +710,7 @@
             
             if (!p5CapturedImage) {
               debug("No captured image available");
+              showErrorInReceipt();
               return;
             }
             
@@ -568,36 +722,78 @@
             workflow[2] = comfy.image(p5SelectedImage);
             workflow[6].inputs.seed = Math.floor(Math.random() * 1e15);
             debug("Generated random seed: " + workflow[6].inputs.seed);
+
+             // Add timeout to handle stuck requests
+            let requestTimeout = setTimeout(() => {
+              debug("ComfyUI request timed out after 120 seconds");
+              showErrorInReceipt();
+            }, 120000); // 2 minute timeout
             
             debug("Running ComfyUI workflow");
-            comfy.run(workflow, gotImage);
+            comfy.run(workflow, (results, err) => {
+              // Clear the timeout since we got a response
+              clearTimeout(requestTimeout);
+              gotImage(results, err);
+            });
           }
           
           function gotImage(results, err) {
             debug("Got image results from ComfyUI");
-            
+  
             if (err) {
               debug("Error in ComfyUI generation: " + err);
               showErrorInReceipt();
               return;
             }
             
-            if (results && results.length > 0) {
-              debug("Successfully received generated image");
-              p.loadImage(results[0].src, (loadedResult) => {
+            if (!results) {
+              debug("No results from ComfyUI");
+              showErrorInReceipt();
+              return;
+            }
+            
+            if (results.length === 0) {
+              debug("Empty results from ComfyUI");
+              showErrorInReceipt();
+              return;
+            }
+            
+            if (!results[0] || !results[0].src) {
+              debug("Invalid result format from ComfyUI");
+              showErrorInReceipt();
+              return;
+            }
+            
+            debug("Successfully received generated image URL: " + results[0].src);
+            
+            // Try loading the image with a timeout
+            let imageLoadTimeout = setTimeout(() => {
+              debug("Image loading timed out");
+              showErrorInReceipt();
+            }, 30000); // 30 second timeout for image loading
+            
+            p.loadImage(results[0].src, 
+              // Success callback
+              (loadedResult) => {
+                clearTimeout(imageLoadTimeout);
                 resImg = loadedResult;
-                debug("Generated image loaded");
+                debug("Generated image loaded successfully");
                 
                 // Update the receipt with the generated image
                 updateReceiptWithResults(capturedImage, selectedImageSrc, results[0].src, jsonFilename);
-              });
-            } else {
-              debug("No results from ComfyUI");
-              showErrorInReceipt();
-            }
+              },
+              // Error callback
+              (err) => {
+                clearTimeout(imageLoadTimeout);
+                debug("Error loading generated image: " + err);
+                showErrorInReceipt();
+              }
+            );
           }
-          
+
           function showErrorInReceipt() {
+            debug("Showing error in receipt interface");
+
             // Update the receipt to show an error message
             updateReceiptWithResults(capturedImage, selectedImageSrc, null, jsonFilename);
           }
@@ -608,6 +804,18 @@
       // Update receipt with results
       function updateReceiptWithResults(capturedImage, selectedImageSrc, generatedImageSrc, jsonFilename) {
         debug("Updating receipt with results");
+
+        // Stop the pulse animation if it's running
+        if (window.pulseAnimationFrame) {
+          cancelAnimationFrame(window.pulseAnimationFrame);
+          window.pulseAnimationFrame = null;
+        }
+
+        // Store the generated image URL for next round
+        if (generatedImageSrc) {
+          lastGeneratedImageUrl = generatedImageSrc;
+          debug("Stored generated image URL for next round: " + lastGeneratedImageUrl);
+        }
         
         const receiptContainer = document.getElementById('receipt-interface');
         if (!receiptContainer) return;
@@ -704,6 +912,21 @@
         // Reset grid
         selectedTile = null;
         clearCountdown();
+
+        // Add generated image to the images array if it exists
+        if (lastGeneratedImageUrl && lastGeneratedImageUrl.trim() !== '') {
+          debug("Adding last generated image to the grid: " + lastGeneratedImageUrl);
+          
+          // If we already have the max number of images, replace a random one
+          if (images.length >= config.imageCount) {
+            const randomIndex = Math.floor(Math.random() * images.length);
+            debug(`Replacing image at index ${randomIndex} with generated image`);
+            images[randomIndex] = lastGeneratedImageUrl;
+          } else {
+            // Otherwise just add it
+            images.push(lastGeneratedImageUrl);
+          }
+        }
         
         // Reinitialize grid
         initializeGrid();
@@ -745,6 +968,21 @@
           
           // Reinitialize grid
           initializeGrid();
+        });
+
+        // Handle back button click
+        document.getElementById('back-button').addEventListener('click', function() {
+          debug("Back button clicked");
+          // Clear any selected tile and countdown
+          selectedTile = null;
+          clearCountdown();
+          
+          // Show checkbox interface, hide grid interface
+          document.getElementById('checkbox-interface').style.display = 'flex';
+          document.getElementById('grid-interface').style.display = 'none';
+          
+          // Reset checkbox state
+          document.getElementById('rational-checkbox').classList.remove('checked');
         });
       }
       
