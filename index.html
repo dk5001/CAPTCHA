@@ -341,33 +341,174 @@
 
       function initWebcam() {
         debug("Initializing webcam");
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          navigator.mediaDevices.getUserMedia({ video: true })
-            .then(function(stream) {
-              debug("Webcam access granted");
-                video = document.createElement('video');
-                video.srcObject = stream;
-                video.autoplay = true;
-                video.muted = true;
-                video.style.transform = 'scaleX(-1)'; // Mirror the webcam
 
-                // Apply CSS filter to make the video black and white
-                video.style.filter = 'grayscale(100%)';
-              
-              // Ensure video is ready to use
-              video.addEventListener('loadedmetadata', function() {
-                debug("Video metadata loaded");
-                video.play().catch(e => debug("Video play error: " + e.message));
-              });
-            })
-            .catch(function(error) {
-              debug("Error accessing webcam: " + error.message);
-            });
-        } else {
-          debug("MediaDevices not supported in this browser");
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+          debug("ERROR: MediaDevices.enumerateDevices() not supported in this browser");
+          // Try with just getUserMedia directly as fallback
+          initWebcamDirectly();
+          return;
         }
+
+        // Request permission first - this helps with device enumeration
+        navigator.mediaDevices.getUserMedia({ video: true })
+          .then(function(stream) {
+            debug("Initial camera permission granted - now will enumerate devices");
+            // Stop this initial stream - we'll create a new one after selecting the right camera
+            stream.getTracks().forEach(track => track.stop());
+            
+            // Now enumerate all devices
+            return navigator.mediaDevices.enumerateDevices();
+          })
+          .then(function(devices) {
+            debug("Available media devices:");
+            
+            // Find video devices (webcams)
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            if (videoDevices.length === 0) {
+              debug("No video input devices found!");
+              initWebcamDirectly();
+              return;
+            }
+            
+            // Log all video devices
+            videoDevices.forEach((device, index) => {
+              debug(`Webcam ${index}: ${device.label || 'Camera ' + (index + 1)} (${device.deviceId})`);
+            });
+            
+            // Always use camera index 1 if available
+            const cameraIndex = videoDevices.length > 1 ? 1 : 0;
+            const selectedCamera = videoDevices[cameraIndex].deviceId;
+            debug(`Selecting camera: ${cameraIndex} (${selectedCamera})`);
+            
+            // Request access to the selected camera
+            return navigator.mediaDevices.getUserMedia({
+              video: {
+                deviceId: {exact: selectedCamera},
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              }
+            });
+          })
+          .then(function(stream) {
+            debug("USB webcam access granted");
+            setupVideoElement(stream);
+          })
+          .catch(function(error) {
+            debug("Error during camera selection: " + error.message);
+            debug("Falling back to default camera");
+            initWebcamDirectly();
+          });
       }
       
+      function initWebcamDirectly() {
+        debug("Trying to initialize webcam directly without device selection");
+        navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        })
+        .then(function(stream) {
+          debug("Default webcam access granted");
+          setupVideoElement(stream);
+        })
+        .catch(function(error) {
+          debug("CRITICAL ERROR: Cannot access any webcam: " + error.message);
+        });
+      }
+
+      function setupVideoElement(stream) {
+        video = document.createElement('video');
+        video.srcObject = stream;
+        video.autoplay = true;
+        video.muted = true;
+        
+        // Apply rotation: 90 degrees clockwise + horizontal flip
+        video.style.transform = 'scaleX(-1) rotate(90deg)';
+        
+        // Apply CSS filter to make the video black and white
+        video.style.filter = 'grayscale(100%)';
+        
+        // Ensure video is ready to use
+        video.addEventListener('loadedmetadata', function() {
+          debug("Video metadata loaded");
+          video.play().catch(e => debug("Video play error: " + e.message));
+        });
+        
+        // Add a button to toggle between cameras (for testing)
+        addCameraSwitchButton();
+      }
+
+      function addCameraSwitchButton() {
+        // Create a button to switch cameras
+        const switchButton = document.createElement('button');
+        switchButton.textContent = 'Switch Camera';
+        switchButton.style.position = 'fixed';
+        switchButton.style.bottom = '10px';
+        switchButton.style.right = '10px';
+        switchButton.style.zIndex = '9999';
+        switchButton.style.padding = '8px 12px';
+        switchButton.style.backgroundColor = '#333';
+        switchButton.style.color = 'white';
+        switchButton.style.border = 'none';
+        switchButton.style.borderRadius = '4px';
+        
+        switchButton.addEventListener('click', function() {
+          debug("Camera switch button clicked");
+          
+          // Stop current video
+          if (video && video.srcObject) {
+            video.srcObject.getTracks().forEach(track => track.stop());
+          }
+          
+          // Re-enumerate devices and pick a different camera
+          navigator.mediaDevices.enumerateDevices()
+            .then(function(devices) {
+              const videoDevices = devices.filter(device => device.kind === 'videoinput');
+              debug(`Found ${videoDevices.length} video devices`);
+              
+              if (videoDevices.length <= 1) {
+                debug("Only one camera available, can't switch");
+                return;
+              }
+              
+              // Get current camera id
+              const currentStream = video.srcObject;
+              const currentTrack = currentStream.getVideoTracks()[0];
+              const currentCameraId = currentTrack.getSettings().deviceId;
+              
+              // Find the index of the current camera
+              const currentIndex = videoDevices.findIndex(device => device.deviceId === currentCameraId);
+              debug(`Current camera index: ${currentIndex}`);
+              
+              // Select next camera (cycling back to 0 if we're at the end)
+              const nextIndex = (currentIndex + 1) % videoDevices.length;
+              const nextCamera = videoDevices[nextIndex].deviceId;
+              debug(`Switching to camera index: ${nextIndex}`);
+              
+              // Get the new stream
+              return navigator.mediaDevices.getUserMedia({
+                video: {
+                  deviceId: {exact: nextCamera},
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 }
+                }
+              });
+            })
+            .then(function(stream) {
+              if (stream) {
+                video.srcObject = stream;
+                debug("Camera switched successfully");
+              }
+            })
+            .catch(function(error) {
+              debug("Error switching camera: " + error.message);
+            });
+        });
+        
+        document.body.appendChild(switchButton);
+      }
+
       // Shuffle array using Fisher-Yates algorithm
       function shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
@@ -451,7 +592,7 @@
               videoClone.style.width = "100%";
               videoClone.style.height = "100%";
               videoClone.style.objectFit = "cover";
-              videoClone.style.transform = "scaleX(-1)";
+              videoClone.style.transform = "scaleX(-1) rotate(90deg)"; // Mirror and rotate
               videoClone.autoplay = true;
               videoClone.muted = true;
               videoClone.play().catch(e => debug("Video clone play error: " + e.message));
@@ -494,6 +635,10 @@
           context.translate(canvas.width, 0);
           context.scale(-1, 1);
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          context.rotate(Math.PI/2);
+
+          // Draw the video frame to the canvas with the transformation applied
+          context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
           
           // Convert to black and white
           const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
@@ -791,7 +936,7 @@
             let requestTimeout = setTimeout(() => {
               debug("ComfyUI request timed out after 120 seconds");
               showErrorInReceipt();
-            }, 120000); // 2 minute timeout
+            }, 90000); // 1 min 30 sec timeout
             
             debug("Running ComfyUI workflow");
             comfy.run(workflow, (results, err) => {

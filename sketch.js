@@ -17,7 +17,7 @@ const config = {
 
 function preload() {
   // Load ComfyUI workflow
-  workflow = loadJSON("latent_face_morph_workflow_controlNet_API_v2.json");
+  workflow = loadJSON("latent_face_morph_workflow_controlNet_API_v3.json");
 }
 
 function setup() {
