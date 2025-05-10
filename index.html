@@ -88,6 +88,54 @@
         margin-left: auto;
       }
 
+      /* Question Interface */
+      #question-interface {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+      }
+
+      .question-container {
+        width: 480px;
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .question-text {
+        font-size: 28px;
+        color: #000;
+        margin-bottom: 30px;
+      }
+
+      .question-input {
+        width: 100%;
+        padding: 12px;
+        font-size: 20px;
+        border: 2px solid #000;
+        border-radius: 5px;
+        margin-bottom: 20px;
+      }
+
+      .question-back-button {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        background-color: rgba(10, 10, 10, 0.6);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 25px;
+        cursor: pointer;
+        border: 2px solid #646464;
+        outline: 2px solid white;
+      }
+      
       /* Grid Interface */
       #grid-interface {
         position: absolute;
@@ -199,6 +247,15 @@
         </div>
       </div>
 
+      <!-- Question Interface -->
+      <div id="question-interface">
+        <div class="question-container">
+          <div class="question-text">I'm a ___</div>
+          <input type="text" id="user-input" class="question-input" placeholder="Type your answer here">
+        </div>
+        <div class="question-back-button" id="question-back-button">Back</div>
+      </div>
+
       <!-- Grid Interface -->
       <div id="grid-interface">
         <div class="header">
@@ -235,6 +292,7 @@
       let capturedImage = null;
       let p5Instance;
       let lastGeneratedImageUrl = null;
+      let userInput = ""; 
       
       // Debug function to help troubleshoot
       function debug(message) {
@@ -721,6 +779,12 @@
             workflow[1] = comfy.image(srcImg);
             workflow[2] = comfy.image(p5SelectedImage);
             workflow[6].inputs.seed = Math.floor(Math.random() * 1e15);
+            
+            // Set the text prompt with user input
+            const promptText = userInput ? `${userInput}, black and white image` : "person, black and white image";
+            debug(`Setting prompt text to: "${promptText}"`);
+            workflow[10].inputs.text = promptText;
+            
             debug("Generated random seed: " + workflow[6].inputs.seed);
 
              // Add timeout to handle stuck requests
@@ -904,9 +968,14 @@
         
         // Reset checkbox state
         document.getElementById('rational-checkbox').classList.remove('checked');
+
+        // Reset question input
+        document.getElementById('user-input').value = '';
+        userInput = "";
         
         // Show checkbox interface
         document.getElementById('checkbox-interface').style.display = 'flex';
+        document.getElementById('question-interface').style.display = 'none';
         document.getElementById('grid-interface').style.display = 'none';
         
         // Reset grid
@@ -955,8 +1024,22 @@
           setTimeout(() => {
             debug("Transitioning to grid interface");
             document.getElementById('checkbox-interface').style.display = 'none';
-            document.getElementById('grid-interface').style.display = 'flex';
+            document.getElementById('question-interface').style.display = 'flex';
           }, config.checkboxWaitTime);
+        });
+
+        // Handle question input
+        document.getElementById('user-input').addEventListener('keypress', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            userInput = this.value.trim();
+            if (userInput) {
+              debug(`User input: "${userInput}"`);
+              // Show grid interface
+              document.getElementById('question-interface').style.display = 'none';
+              document.getElementById('grid-interface').style.display = 'flex';
+            }
+          }
         });
         
         // Handle shuffle button click
@@ -970,19 +1053,28 @@
           initializeGrid();
         });
 
-        // Handle back button click
+        // Handle question back button
+        document.getElementById('question-back-button').addEventListener('click', function() {
+          debug("Question back button clicked");
+          document.getElementById('question-interface').style.display = 'none';
+          document.getElementById('checkbox-interface').style.display = 'flex';
+          
+          // Reset checkbox state
+          document.getElementById('rational-checkbox').classList.remove('checked');
+          document.getElementById('user-input').value = ''; // Clear input
+          userInput = ""; // Reset stored input
+        });
+
+        // Handle grid back button
         document.getElementById('back-button').addEventListener('click', function() {
-          debug("Back button clicked");
+          debug("Grid back button clicked");
           // Clear any selected tile and countdown
           selectedTile = null;
           clearCountdown();
           
-          // Show checkbox interface, hide grid interface
-          document.getElementById('checkbox-interface').style.display = 'flex';
+          // Show question interface, hide grid interface
           document.getElementById('grid-interface').style.display = 'none';
-          
-          // Reset checkbox state
-          document.getElementById('rational-checkbox').classList.remove('checked');
+          document.getElementById('question-interface').style.display = 'flex';
         });
       }
       
