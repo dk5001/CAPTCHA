@@ -250,8 +250,9 @@
       <!-- Question Interface -->
       <div id="question-interface">
         <div class="question-container">
-          <div class="question-text">I'm a ___</div>
+          <div class="question-text">I imagine myself as a ___</div>
           <input type="text" id="user-input" class="question-input" placeholder="Type your answer here">
+          <div style="font-size: 18px; color: #6f6f6f; margin-top: 10px;">Press enter to move on</div>
         </div>
         <div class="question-back-button" id="question-back-button">Back</div>
       </div>
@@ -1036,12 +1037,12 @@
         receiptContainer.innerHTML = `
           <h1 style="margin-bottom: 20px;">GENERATION RESULTS</h1>
           
-          <div style="width: 100%; display: flex; justify-content: space-between; margin-bottom: 20px;">
+          <div style="width: 100%; display: flex; justify-content: center; gap: 40px; margin-bottom: 20px;">
             <div>
               <p>Date: ${new Date().toLocaleDateString()}</p>
               <p>Time: ${new Date().toLocaleTimeString()}</p>
             </div>
-            <div style="font-weight: bold; font-size: 1.2em; color: #cc0000;">
+            <div style="font-weight: bold; font-size: 1.2em; color: #cc0000; text-align: center;">
               <p>User ID: ${jsonFilename ? jsonFilename.replace('subject_', '') : Math.floor(100000 + Math.random() * 900000)}</p>
             </div>
           </div>
