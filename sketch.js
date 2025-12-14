@@ -6,6 +6,7 @@ let resImg;
 let capturedImage = null;
 let selectedImage = null;
 let jsonFilename = "";
+let displayChannel;
 
 // Configuration object for essential settings
 const config = {
@@ -31,6 +32,9 @@ function setup() {
   // Initialize ComfyUI helper
   comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");
   console.log("workflow is", workflow);
+  
+  // Initialize BroadcastChannel for display window communication
+  displayChannel = new BroadcastChannel('captcha_generation');
   
   // We don't need to draw anything in this sketch since the UI is handled by HTML
   noLoop();
@@ -88,6 +92,17 @@ function gotImage(results, err) {
     resImg = loadImage(results[0].src, () => {
       // Process the morphed images for next round
       updateGridImagesForNextRound(resImg);
+      
+      // Broadcast to display window
+      if (displayChannel) {
+        displayChannel.postMessage({
+          type: 'new_image',
+          url: results[0].src
+        });
+      }
+      
+      // Store in localStorage as backup
+      localStorage.setItem('lastGeneratedImage', results[0].src);
       
       // After loading the result image, notify index.html
       if (window.parent && window.parent.handleGeneratedImage) {

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Latest Generated Face</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #display-image {
+            max-width: 90vw;
+            max-height: 90vh;
+            object-fit: contain;
+            border: 2px solid white;
+        }
+        #status {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Waiting for generated image...</div>
+    <img id="display-image" style="display: none;">
+    
+    <script>
+        const displayImg = document.getElementById('display-image');
+        const status = document.getElementById('status');
+        
+        console.log('Display window initializing...');
+        
+        // Use BroadcastChannel for communication between windows
+        const channel = new BroadcastChannel('captcha_generation');
+        console.log('BroadcastChannel created');
+        
+        channel.onmessage = (event) => {
+            console.log('BroadcastChannel message received:', event.data);
+            if (event.data.type === 'new_image') {
+                console.log('Received new image:', event.data.url);
+                displayImg.src = event.data.url;
+                displayImg.style.display = 'block';
+                status.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+                status.style.display = 'block';
+                setTimeout(() => status.style.display = 'none', 3000);
+            }
+        };
+        
+        // Also check localStorage on load (in case display window opened after generation)
+        console.log('Checking localStorage for lastGeneratedImage...');
+        const lastImage = localStorage.getItem('lastGeneratedImage');
+        console.log('lastGeneratedImage from localStorage:', lastImage);
+        
+        if (lastImage) {
+            console.log('Loading last generated image from localStorage');
+            displayImg.src = lastImage;
+            displayImg.style.display = 'block';
+            status.textContent = 'Showing last generated image';
+            setTimeout(() => status.style.display = 'none', 3000);
+        } else {
+            console.log('No image found in localStorage');
+        }
+        
+        console.log('Display window ready, listening for new images...');
+    </script>
+</body>
+</html>

@@ -293,7 +293,8 @@
       let capturedImage = null;
       let p5Instance;
       let lastGeneratedImageUrl = null;
-      let userInput = ""; 
+      let userInput = "";
+      let displayChannel; // BroadcastChannel for display window 
       
       // Debug function to help troubleshoot
       function debug(message) {
@@ -1117,6 +1118,19 @@
         if (generatedImageSrc) {
           lastGeneratedImageUrl = generatedImageSrc;
           debug("Stored generated image URL for next round: " + lastGeneratedImageUrl);
+          
+          // Broadcast to display window
+          if (displayChannel) {
+            debug("Broadcasting new image to display window");
+            displayChannel.postMessage({
+              type: 'new_image',
+              url: generatedImageSrc
+            });
+          }
+          
+          // Store in localStorage as backup
+          localStorage.setItem('lastGeneratedImage', generatedImageSrc);
+          debug("Saved image to localStorage");
         }
         
         const receiptContainer = document.getElementById('receipt-interface');
@@ -1254,6 +1268,29 @@
         // Ensure switch camera button is available even if webcam init fails
         try { addCameraSwitchButton(); } catch(e) { debug('addCameraSwitchButton error: ' + e.message); }
         initWebcam();
+        
+        // Initialize BroadcastChannel for display window communication
+        displayChannel = new BroadcastChannel('captcha_generation');
+        
+        // Add button to open display window
+        const openDisplayBtn = document.createElement('button');
+        openDisplayBtn.textContent = 'Open Display Window';
+        openDisplayBtn.style.position = 'fixed';
+        openDisplayBtn.style.top = '10px';
+        openDisplayBtn.style.right = '10px';
+        openDisplayBtn.style.zIndex = '10000';
+        openDisplayBtn.style.padding = '10px 20px';
+        openDisplayBtn.style.backgroundColor = '#0066cc';
+        openDisplayBtn.style.color = 'white';
+        openDisplayBtn.style.border = 'none';
+        openDisplayBtn.style.borderRadius = '5px';
+        openDisplayBtn.style.cursor = 'pointer';
+        
+        openDisplayBtn.addEventListener('click', () => {
+            window.open('display.html', 'DisplayWindow', 'width=800,height=600');
+        });
+        
+        document.body.appendChild(openDisplayBtn);
         
         // Handle checkbox click
         document.getElementById('rational-checkbox').addEventListener('click', function() {
