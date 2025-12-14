@@ -338,9 +338,9 @@
           gridItem.addEventListener('click', handleTileClick);
         }
         debug("Grid initialized with images");
-      }
+            }
 
-      function initWebcam() {
+            function initWebcam() {
         debug("Initializing webcam");
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
@@ -376,22 +376,22 @@
               debug(`Webcam ${index}: ${device.label || 'Camera ' + (index + 1)} (${device.deviceId})`);
             });
             
-            // Always use camera index 1 if available
-            const cameraIndex = videoDevices.length > 1 ? 1 : 0;
+            // Always use camera index 0 if available
+            const cameraIndex = 0;
             const selectedCamera = videoDevices[cameraIndex].deviceId;
             debug(`Selecting camera: ${cameraIndex} (${selectedCamera})`);
             
             // Request access to the selected camera
             return navigator.mediaDevices.getUserMedia({
               video: {
-                deviceId: {exact: selectedCamera},
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
+          deviceId: {exact: selectedCamera},
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
               }
             });
           })
           .then(function(stream) {
-            debug("USB webcam access granted");
+            debug("Camera access granted");
             setupVideoElement(stream);
           })
           .catch(function(error) {
@@ -399,9 +399,9 @@
             debug("Falling back to default camera");
             initWebcamDirectly();
           });
-      }
-      
-      function initWebcamDirectly() {
+            }
+            
+            function initWebcamDirectly() {
         debug("Trying to initialize webcam directly without device selection");
         navigator.mediaDevices.getUserMedia({ 
           video: { 
@@ -414,11 +414,20 @@
           setupVideoElement(stream);
         })
         .catch(function(error) {
-          debug("CRITICAL ERROR: Cannot access any webcam: " + error.message);
+          debug("Error with ideal constraints: " + error.message);
+          debug("Trying with minimal constraints");
+          navigator.mediaDevices.getUserMedia({ video: true })
+            .then(function(stream) {
+              debug("Minimal webcam access granted");
+              setupVideoElement(stream);
+            })
+            .catch(function(err) {
+               debug("CRITICAL ERROR: Cannot access any webcam: " + err.message);
+            });
         });
-      }
+            }
 
-      function setupVideoElement(stream) {
+            function setupVideoElement(stream) {
         video = document.createElement('video');
         video.srcObject = stream;
         video.autoplay = true;
@@ -438,76 +447,127 @@
         
         // Add a button to toggle between cameras (for testing)
         addCameraSwitchButton();
-      }
+            }
 
       function addCameraSwitchButton() {
-        // Create a button to switch cameras
-        const switchButton = document.createElement('button');
-        switchButton.textContent = 'Switch Camera';
-        switchButton.style.position = 'fixed';
-        switchButton.style.bottom = '10px';
-        switchButton.style.right = '10px';
-        switchButton.style.zIndex = '9999';
-        switchButton.style.padding = '8px 12px';
-        switchButton.style.backgroundColor = '#333';
-        switchButton.style.color = 'white';
-        switchButton.style.border = 'none';
-        switchButton.style.borderRadius = '4px';
-        
+        // Create or reuse the switch button
+        let switchButton = document.getElementById('camera-switch-btn');
+        if (!switchButton) {
+          switchButton = document.createElement('button');
+          switchButton.id = 'camera-switch-btn';
+          switchButton.textContent = 'Switch Camera';
+                    switchButton.style.position = 'fixed';
+                    switchButton.style.bottom = '12px';
+                    switchButton.style.right = '12px';
+                    switchButton.style.zIndex = '2147483647'; // very high
+                    switchButton.style.padding = '10px 14px';
+                    switchButton.style.backgroundColor = '#ff5722'; // bright orange
+                    switchButton.style.color = 'white';
+                    switchButton.style.border = '2px solid #fff';
+                    switchButton.style.borderRadius = '6px';
+                    switchButton.style.fontSize = '14px';
+                    switchButton.style.boxShadow = '0 6px 18px rgba(0,0,0,0.6)';
+          document.body.appendChild(switchButton);
+        } else {
+          switchButton.style.display = 'block';
+          // make visible and prominent
+          switchButton.style.backgroundColor = '#ff5722';
+          switchButton.style.color = 'white';
+          switchButton.style.zIndex = '2147483647';
+          if (!document.body.contains(switchButton)) document.body.appendChild(switchButton);
+        }
+
+        // Attach handler once
+        if (switchButton.dataset && switchButton.dataset.hasHandler === '1') return;
+        switchButton.dataset = switchButton.dataset || {};
+        switchButton.dataset.hasHandler = '1';
+
         switchButton.addEventListener('click', function() {
-          debug("Camera switch button clicked");
-          
-          // Stop current video
-          if (video && video.srcObject) {
-            video.srcObject.getTracks().forEach(track => track.stop());
+                debug('Camera switch button clicked');
+
+          // Small status UI
+          let statusEl = document.getElementById('camera-switch-status');
+          if (!statusEl) {
+            statusEl = document.createElement('div');
+            statusEl.id = 'camera-switch-status';
+            statusEl.style.position = 'fixed';
+            statusEl.style.bottom = '48px';
+            statusEl.style.right = '10px';
+            statusEl.style.zIndex = '10000';
+            statusEl.style.padding = '6px 8px';
+            statusEl.style.backgroundColor = 'rgba(0,0,0,0.6)';
+            statusEl.style.color = 'white';
+            statusEl.style.borderRadius = '4px';
+            statusEl.style.fontSize = '12px';
+            document.body.appendChild(statusEl);
           }
-          
-          // Re-enumerate devices and pick a different camera
+          statusEl.textContent = 'Attempting camera switch...';
+
+          // Determine current camera id
+          let currentCameraId = null;
+          if (video && video.srcObject) {
+            const tracks = video.srcObject.getVideoTracks();
+            if (tracks.length) currentCameraId = tracks[0].getSettings().deviceId;
+          }
+
           navigator.mediaDevices.enumerateDevices()
             .then(function(devices) {
-              const videoDevices = devices.filter(device => device.kind === 'videoinput');
-              debug(`Found ${videoDevices.length} video devices`);
-              
+              const videoDevices = devices.filter(d => d.kind === 'videoinput');
+              debug('Found ' + videoDevices.length + ' video devices');
+
               if (videoDevices.length <= 1) {
-                debug("Only one camera available, can't switch");
-                return;
+                statusEl.textContent = 'No alternate camera found — retrying default...';
+                return navigator.mediaDevices.getUserMedia({ video: true });
               }
-              
-              // Get current camera id
-              const currentStream = video.srcObject;
-              const currentTrack = currentStream.getVideoTracks()[0];
-              const currentCameraId = currentTrack.getSettings().deviceId;
-              
-              // Find the index of the current camera
-              const currentIndex = videoDevices.findIndex(device => device.deviceId === currentCameraId);
-              debug(`Current camera index: ${currentIndex}`);
-              
-              // Select next camera (cycling back to 0 if we're at the end)
-              const nextIndex = (currentIndex + 1) % videoDevices.length;
-              const nextCamera = videoDevices[nextIndex].deviceId;
-              debug(`Switching to camera index: ${nextIndex}`);
-              
-              // Get the new stream
-              return navigator.mediaDevices.getUserMedia({
-                video: {
-                  deviceId: {exact: nextCamera},
-                  width: { ideal: 1280 },
-                  height: { ideal: 720 }
-                }
-              });
+
+              // Stop current stream before switching
+              if (video && video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+
+              let currentIndex = -1;
+              if (currentCameraId) currentIndex = videoDevices.findIndex(d => d.deviceId === currentCameraId);
+              let nextIndex = currentIndex === 0 ? 1 : 0;
+              if (nextIndex >= videoDevices.length) nextIndex = 0;
+              const nextCameraId = videoDevices[nextIndex].deviceId;
+              debug('Switching to camera index: ' + nextIndex);
+              statusEl.textContent = 'Switching camera...';
+
+              return new Promise(resolve => setTimeout(() => resolve(nextCameraId), 200));
+            })
+            .then(function(nextCameraId) {
+              if (!nextCameraId) return null;
+              return navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: nextCameraId }, width: { ideal: 1280 }, height: { ideal: 720 } } });
             })
             .then(function(stream) {
-              if (stream) {
+              if (!stream) return;
+              if (video) {
                 video.srcObject = stream;
-                debug("Camera switched successfully");
+                video.play().catch(e => debug('Video play error: ' + e.message));
+              } else {
+                setupVideoElement(stream);
               }
+              statusEl.textContent = 'Camera switched';
+              setTimeout(() => statusEl.remove(), 1200);
+              const activeVideos = document.querySelectorAll('.grid-item.webcam-active video');
+              activeVideos.forEach(v => { v.srcObject = stream; v.play().catch(() => {}); });
             })
-            .catch(function(error) {
-              debug("Error switching camera: " + error.message);
+            .catch(function(err) {
+              debug('Switch error: ' + err.message);
+              // Try minimal recovery
+              navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                  if (video) { video.srcObject = stream; video.play().catch(() => {}); }
+                  else { setupVideoElement(stream); }
+                  statusEl.textContent = 'Recovered default camera';
+                  setTimeout(() => statusEl.remove(), 1200);
+                })
+                .catch(function(e) {
+                  debug('Recovery failed: ' + e.message);
+                  statusEl.textContent = 'No camera available. Click to retry.';
+                  statusEl.style.cursor = 'pointer';
+                  statusEl.onclick = function() { statusEl.textContent = 'Retrying...'; statusEl.onclick = null; switchButton.click(); };
+                });
             });
         });
-        
-        document.body.appendChild(switchButton);
       }
 
       // Shuffle array using Fisher-Yates algorithm
@@ -714,6 +774,7 @@
             function updatePulse() {
               const elapsed = Date.now() - startTime;
               
+            
               // Create a sine wave with period of 2 seconds
               const intensity = Math.sin(elapsed / 2000 * Math.PI) * 0.5 + 0.5;
               
@@ -721,6 +782,7 @@
               selectedGlow.style.backgroundColor = `rgba(255, 0, 0, ${intensity * 0.4})`;
               capturedGlow.style.backgroundColor = `rgba(255, 0, 0, ${intensity * 0.4})`;
               
+
               // Update the status message every 3 seconds
               if (elapsed % 3000 < 100 && elapsed > 100) {
                 currentMsgIndex = (currentMsgIndex + 1) % statusMessages.length;
@@ -732,9 +794,11 @@
                 dotCount = (dotCount + 1) % 4;
               }
               
+
               // Update status message
               statusMsg.textContent = statusMessages[currentMsgIndex] + '.'.repeat(dotCount);
               
+            
               // Continue animation
               animationFrame = requestAnimationFrame(updatePulse);
             }
@@ -909,7 +973,7 @@
             });
           };
           
-          function requestImage() {
+          async function requestImage() {
             debug("Requesting ComfyUI image generation");
             
             if (!p5CapturedImage) {
@@ -927,7 +991,35 @@
             workflow[6].inputs.seed = Math.floor(Math.random() * 1e15);
             
             // Set the text prompt with user input
-            const promptText = userInput ? `${userInput}, black and white image` : "person, black and white image";
+            let promptText = "person, black and white image";
+            
+            if (userInput) {
+              try {
+                debug("Calling prompt server with: " + userInput);
+                const response = await fetch("http://127.0.0.1:8088", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ text: userInput })
+                });
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.prompt) {
+                    promptText = data.prompt + ", black and white image";
+                    debug("Received enhanced prompt: " + promptText);
+                  } else {
+                    promptText = `${userInput}, black and white image`;
+                  }
+                } else {
+                  debug("Prompt server returned status: " + response.status);
+                  promptText = `${userInput}, black and white image`;
+                }
+              } catch (e) {
+                debug("Error calling prompt server: " + e.message);
+                promptText = `${userInput}, black and white image`;
+              }
+            }
+            
             debug(`Setting prompt text to: "${promptText}"`);
             workflow[10].inputs.text = promptText;
             
@@ -1159,6 +1251,8 @@
         debug("Initializing application");
         preloadImages();
         initializeGrid();
+        // Ensure switch camera button is available even if webcam init fails
+        try { addCameraSwitchButton(); } catch(e) { debug('addCameraSwitchButton error: ' + e.message); }
         initWebcam();
         
         // Handle checkbox click
