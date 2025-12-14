@@ -294,7 +294,8 @@
       let p5Instance;
       let lastGeneratedImageUrl = null;
       let userInput = "";
-      let displayChannel; // BroadcastChannel for display window 
+      let displayChannel; // BroadcastChannel for display window
+      let questionSubmitted = false; // Flag to prevent multiple submissions 
       
       // Debug function to help troubleshoot
       function debug(message) {
@@ -749,13 +750,17 @@
             
             debug("Image captured and displayed");
   
-            // Get the selected original image
-            const selectedImageSrc = displayedImages[selectedTile.dataset.index];
+            // Store the captured image and selected image source globally for later use
+            window.capturedImage = capturedImage;
+            window.selectedImageSrc = displayedImages[selectedTile.dataset.index];
             
-            // Here you would proceed to the next state
+            // Here you would proceed to the next state - show question interface
             setTimeout(() => {
-              debug("Creating p5 instance for ComfyUI integration");
-              createReceiptInterface(capturedImage, selectedImageSrc);
+              debug("Transitioning to question interface");
+              document.getElementById('grid-interface').style.display = 'none';
+              document.getElementById('question-interface').style.display = 'flex';
+              // Focus on the input field
+              document.getElementById('user-input').focus();
             }, 1000);
           };
           
@@ -1238,6 +1243,7 @@
         // Reset question input
         document.getElementById('user-input').value = '';
         userInput = "";
+        questionSubmitted = false; // Reset submission flag
         
         // Show checkbox interface
         document.getElementById('checkbox-interface').style.display = 'flex';
@@ -1275,7 +1281,14 @@
       }
       
       // Initialize application
+      let isInitialized = false; // Flag to prevent duplicate initialization
       function init() {
+        if (isInitialized) {
+          debug("Already initialized, skipping");
+          return;
+        }
+        isInitialized = true;
+        
         debug("Initializing application");
         preloadImages();
         initializeGrid();
@@ -1315,20 +1328,29 @@
           setTimeout(() => {
             debug("Transitioning to grid interface");
             document.getElementById('checkbox-interface').style.display = 'none';
-            document.getElementById('question-interface').style.display = 'flex';
+            document.getElementById('grid-interface').style.display = 'flex';
           }, config.checkboxWaitTime);
         });
 
         // Handle question input
         document.getElementById('user-input').addEventListener('keypress', function(e) {
-          if (e.key === 'Enter') {
+          if (e.key === 'Enter' && !questionSubmitted) {
             e.preventDefault();
             userInput = this.value.trim();
             if (userInput) {
               debug(`User input: "${userInput}"`);
-              // Show grid interface
+              questionSubmitted = true; // Set flag to prevent further submissions
+              
+              // Hide question interface immediately
               document.getElementById('question-interface').style.display = 'none';
-              document.getElementById('grid-interface').style.display = 'flex';
+              
+              // Process the captured images and selected image
+              if (window.capturedImage && window.selectedImageSrc) {
+                createReceiptInterface(window.capturedImage, window.selectedImageSrc);
+              } else {
+                debug("Error: captured image or selected image not available");
+                questionSubmitted = false; // Reset flag if there's an error
+              }
             }
           }
         });
@@ -1348,12 +1370,11 @@
         document.getElementById('question-back-button').addEventListener('click', function() {
           debug("Question back button clicked");
           document.getElementById('question-interface').style.display = 'none';
-          document.getElementById('checkbox-interface').style.display = 'flex';
+          document.getElementById('grid-interface').style.display = 'flex';
           
-          // Reset checkbox state
-          document.getElementById('rational-checkbox').classList.remove('checked');
           document.getElementById('user-input').value = ''; // Clear input
           userInput = ""; // Reset stored input
+          questionSubmitted = false; // Reset submission flag
         });
 
         // Handle grid back button
@@ -1363,9 +1384,12 @@
           selectedTile = null;
           clearCountdown();
           
-          // Show question interface, hide grid interface
+          // Show checkbox interface, hide grid interface
           document.getElementById('grid-interface').style.display = 'none';
-          document.getElementById('question-interface').style.display = 'flex';
+          document.getElementById('checkbox-interface').style.display = 'flex';
+          
+          // Reset checkbox state
+          document.getElementById('rational-checkbox').classList.remove('checked');
         });
       }
       
