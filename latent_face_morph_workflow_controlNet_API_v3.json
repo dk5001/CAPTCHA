@@ -71,11 +71,11 @@
   "6": {
     "inputs": {
       "seed": 764582015797817,
-      "steps": 20,
+      "steps": 1,
       "cfg": 6,
       "sampler_name": "euler",
-      "scheduler": "karras",
-      "denoise": 0.4,
+      "scheduler": "simple",
+      "denoise": 0.5,
       "model": [
         "9",
         0

@@ -688,19 +688,33 @@
         const context = canvas.getContext('2d');
         
         try {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+          const videoWidth = video.videoWidth;
+          const videoHeight = video.videoHeight;
+          
+          debug(`Original video dimensions: ${videoWidth} x ${videoHeight}`);
+          
+          // Calculate square crop dimensions (use the smaller dimension)
+          const cropSize = Math.min(videoWidth, videoHeight);
+          
+          // Calculate crop offset to center the crop area
+          const cropX = (videoWidth - cropSize) / 2;
+          const cropY = (videoHeight - cropSize) / 2;
+          
+          debug(`Cropping ${cropSize}x${cropSize} from center (offset: ${cropX}, ${cropY})`);
+          
+          // Set canvas to square
+          canvas.width = cropSize;
+          canvas.height = cropSize;
           
           debug(`Canvas created: ${canvas.width} x ${canvas.height}`);
           
-          // Draw the video frame to the canvas (flipped horizontally)
+          // Draw the video frame to the canvas (flipped horizontally, center-cropped)
           context.translate(canvas.width, 0);
           context.scale(-1, 1);
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          context.rotate(Math.PI/2);
-
-          // Draw the video frame to the canvas with the transformation applied
-          context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+          // drawImage(image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
+          // sx, sy: source crop position | sWidth, sHeight: source crop size
+          // dx, dy: destination position | dWidth, dHeight: destination size
+          context.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, cropSize, cropSize);
           
           // Convert to black and white
           const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
@@ -1009,15 +1023,15 @@
                     promptText = data.prompt + ", black and white image";
                     debug("Received enhanced prompt: " + promptText);
                   } else {
-                    promptText = `${userInput}, black and white image`;
+                    promptText = `${userInput} in a form of a human, black and white image`;
                   }
                 } else {
                   debug("Prompt server returned status: " + response.status);
-                  promptText = `${userInput}, black and white image`;
+                  promptText = `${userInput} in a form of a human, black and white image`;
                 }
               } catch (e) {
                 debug("Error calling prompt server: " + e.message);
-                promptText = `${userInput}, black and white image`;
+                promptText = `${userInput} in a form of a human, black and white image`;
               }
             }
             

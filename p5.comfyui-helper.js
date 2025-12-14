@@ -92,6 +92,11 @@ class ComfyUiP5Helper {
   }
 
   async prompt(workflow) {
+    // DEBUG: Log what's being sent to ComfyUI
+    console.log("=== COMFY HELPER SENDING ===");
+    console.log("Node 6 being sent:", JSON.stringify(workflow["6"], null, 2));
+    console.log("===========================");
+    
     let options = {
       method: "POST",
       body: JSON.stringify({ prompt: workflow, client_id: this.sid }),

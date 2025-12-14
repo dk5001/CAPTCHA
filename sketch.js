@@ -21,6 +21,17 @@ function preload() {
   workflow = loadJSON("latent_face_morph_workflow_controlNet_API_v3.json");
 }
 
+function logWorkflowDetails() {
+  console.log("=== WORKFLOW DEBUG ===");
+  console.log("Workflow object:", workflow);
+  console.log("Workflow keys:", Object.keys(workflow));
+  console.log("Node 6 exists?", workflow["6"] !== undefined);
+  if (workflow["6"]) {
+    console.log("Node 6:", JSON.stringify(workflow["6"], null, 2));
+  }
+  console.log("===================");
+}
+
 function setup() {
   // Create a hidden canvas for ComfyUI operations
   createCanvas(config.canvasWidth, config.canvasHeight);
@@ -32,6 +43,7 @@ function setup() {
   // Initialize ComfyUI helper
   comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");
   console.log("workflow is", workflow);
+  logWorkflowDetails(); // Debug workflow structure
   
   // Initialize BroadcastChannel for display window communication
   displayChannel = new BroadcastChannel('captcha_generation');
@@ -66,13 +78,23 @@ function requestImage() {
   // Prepare source image for generation
   srcImg.image(capturedImage, 0, 0, config.canvasWidth, config.canvasHeight);
 
-  // replace the LoadImage node with our source image
-  workflow[1] = comfy.image(srcImg);
-  workflow[2] = comfy.image(selectedImage);
-  workflow[6].inputs.seed = Math.floor(Math.random() * 1e15);
-  console.log("seed: ", workflow[3].inputs.seed);
-
-  console.log("Running ComfyUI workflow");
+  // replac"1"] = comfy.image(srcImg);
+  workflow["2"] = comfy.image(selectedImage);
+  
+  // Generate random seed and update workflow
+  const randomSeed = Math.floor(Math.random() * 1e15);
+  workflow["6"].inputs.seed = randomSeed;
+  
+  console.log("=== BEFORE SENDING TO COMFY ===");
+  console.log("seed: ", workflow["6"].inputs.seed);
+  console.log("steps: ", workflow["6"].inputs.steps);
+  console.log("sampler: ", workflow["6"].inputs.sampler_name);
+  console.log("denoise: ", workflow["6"].inputs.denoise);
+  console.log("cfg: ", workflow["6"].inputs.cfg);
+  console.log("Full workflow node 6:", JSON.stringify(workflow["6"], null, 2));
+  console.log("==============================");
+  
+  console.log("Full workflow node 6:", JSON.stringify(workflow[6], null, 2));
   comfy.run(workflow, gotImage);
 }
 
