@@ -16,6 +16,7 @@
         overflow-y: auto;
         width: 100%;
         min-height: 100vh;
+        min-height: 100dvh;
         display: flex;
         justify-content: center;
         align-items: flex-start;
@@ -28,6 +29,7 @@
         width: 100%;
         max-width: 800px;
         height: 100vh;
+        height: 100dvh;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -303,30 +305,22 @@
       }
 
       .receipt-img {
-        width: min(240px, 80vw);
-        height: min(240px, 80vw);
+        width: min(200px, 28vw);
+        height: min(200px, 28vw);
         object-fit: cover;
         border: 1px solid #ccc;
         display: block;
       }
 
       .receipt-img-placeholder {
-        width: min(240px, 80vw);
-        height: min(240px, 80vw);
+        width: min(200px, 28vw);
+        height: min(200px, 28vw);
         border: 1px solid #ccc;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: clamp(12px, 3vw, 15px);
+        font-size: clamp(11px, 3vw, 14px);
         color: #666;
-      }
-
-      @media (min-width: 600px) {
-        .receipt-img,
-        .receipt-img-placeholder {
-          width: min(240px, 28vw);
-          height: min(240px, 28vw);
-        }
       }
 
       .receipt-footer {
@@ -370,18 +364,11 @@
       }
 
       .loading-thumb {
-        width: min(240px, 80vw);
-        height: min(240px, 80vw);
+        width: min(200px, 40vw);
+        height: min(200px, 40vw);
         object-fit: cover;
         position: relative;
         border: 1px solid #ccc;
-      }
-
-      @media (min-width: 600px) {
-        .loading-thumb {
-          width: 240px;
-          height: 240px;
-        }
       }
     </style>
   </head>
@@ -832,10 +819,15 @@
       // Capture image from webcam
       function captureImage(selectedTile) {
         debug("Capturing image");
-        
+
         if (!video || !video.srcObject) {
           debug("Video not available for capture");
           return;
+        }
+
+        // Resume video if mobile browser paused it
+        if (video.paused) {
+          video.play().catch(e => debug("Video resume before capture: " + e.message));
         }
         
         // Create a canvas to capture the webcam image
@@ -1169,30 +1161,8 @@
             }
             
             debug("Successfully received generated image URL: " + results[0].src);
-            
-            // Try loading the image with a timeout
-            let imageLoadTimeout = setTimeout(() => {
-              debug("Image loading timed out");
-              showErrorInReceipt();
-            }, 30000); // 30 second timeout for image loading
-            
-            p.loadImage(results[0].src, 
-              // Success callback
-              (loadedResult) => {
-                clearTimeout(imageLoadTimeout);
-                resImg = loadedResult;
-                debug("Generated image loaded successfully");
-                
-                // Update the receipt with the generated image
-                updateReceiptWithResults(capturedImage, selectedImageSrc, results[0].src, jsonFilename);
-              },
-              // Error callback
-              (err) => {
-                clearTimeout(imageLoadTimeout);
-                debug("Error loading generated image: " + err);
-                showErrorInReceipt();
-              }
-            );
+            // Show receipt immediately — browser loads image naturally via <img> tag
+            updateReceiptWithResults(capturedImage, selectedImageSrc, results[0].src, jsonFilename);
           }
 
           function showErrorInReceipt() {
@@ -1315,7 +1285,16 @@
         // Reset question input
         document.getElementById('user-input').value = '';
         userInput = "";
-        questionSubmitted = false; // Reset submission flag
+        questionSubmitted = false;
+
+        // Clear captured image so next round captures a fresh frame
+        window.capturedImage = null;
+        window.selectedImageSrc = null;
+
+        // Ensure webcam is still running (mobile may pause it during long waits)
+        if (video && video.paused) {
+          video.play().catch(e => debug("Video resume error: " + e.message));
+        }
         
         // Show checkbox interface
         document.getElementById('checkbox-interface').style.display = 'flex';
