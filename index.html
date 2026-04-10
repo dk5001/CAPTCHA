@@ -188,12 +188,19 @@
         cursor: pointer;
         position: relative;
         overflow: hidden;
+        background-color: #1a1a1a; /* placeholder while image loads */
       }
 
       .grid-item img {
         width: 100%;
         height: 100%;
         object-fit: cover;
+        opacity: 0;
+        transition: opacity 0.25s ease;
+      }
+
+      .grid-item img.img-loaded {
+        opacity: 1;
       }
 
       .grid-item.selected::after {
@@ -431,6 +438,7 @@
       let capturedImage = null;
       let p5Instance;
       let lastGeneratedImageUrl = null;
+      let shuffleMode = false; // false = most-recent-first, true = random
       let userInput = "";
       let displayChannel; // BroadcastChannel for display window
       let questionSubmitted = false; // Flag to prevent multiple submissions 
@@ -440,6 +448,47 @@
         console.log(`DEBUG: ${message}`);
       }
       
+      // Load past generated images from ComfyUI history so all browsers share the same pool
+      let _syncInProgress = false;
+      async function syncHistoryFromComfyUI() {
+        if (!COMFY_URL || _syncInProgress) return;
+        _syncInProgress = true;
+        try {
+          const res = await fetch(COMFY_URL + "/history?max_items=60");
+          if (!res.ok) return;
+          const history = await res.json();
+
+          // Build a deduplicated set from CURRENT images array each time
+          const seen = new Set(images);
+          let added = 0;
+          for (const promptId in history) {
+            const outputs = history[promptId].outputs;
+            if (!outputs) continue;
+            for (const nodeId in outputs) {
+              const imgs = outputs[nodeId].images;
+              if (!imgs) continue;
+              for (const img of imgs) {
+                if (img.type !== "output") continue;
+                const url = COMFY_URL + "/view?filename=" + encodeURIComponent(img.filename) +
+                  "&subfolder=" + encodeURIComponent(img.subfolder || "") +
+                  "&type=output";
+                if (!seen.has(url)) {
+                  images.push(url);
+                  seen.add(url);
+                  added++;
+                }
+              }
+            }
+          }
+          debug("Synced " + added + " images from ComfyUI history");
+          if (added > 0) initializeGrid();
+        } catch (e) {
+          debug("ComfyUI history sync failed: " + e.message);
+        } finally {
+          _syncInProgress = false;
+        }
+      }
+
       // Load all images
       function preloadImages() {
         debug("Preloading images");
@@ -457,8 +506,20 @@
         const gridContainer = document.getElementById('grid-container');
         gridContainer.innerHTML = '';
         
-        // Shuffle the images array and take the first 9
-        displayedImages = shuffleArray([...images]).slice(0, config.gridSize * config.gridSize);
+        const gridSlots = config.gridSize * config.gridSize;
+        const localImgs = images.slice(0, config.imageCount);
+        const generatedImgs = [...new Set(images.slice(config.imageCount))];
+
+        if (shuffleMode) {
+          // Full random mix from everything
+          displayedImages = shuffleArray([...new Set(images)]).slice(0, gridSlots);
+        } else {
+          // Default: most recent generated faces first (sequential, newest last-in-array = top-left)
+          const recentGenerated = generatedImgs.slice(-gridSlots).reverse(); // newest at index 0
+          const fillCount = gridSlots - recentGenerated.length;
+          const localFill = shuffleArray([...localImgs]).slice(0, fillCount);
+          displayedImages = [...recentGenerated, ...localFill];
+        }
         
         // Create grid items
         for (let i = 0; i < displayedImages.length; i++) {
@@ -467,9 +528,11 @@
           gridItem.dataset.index = i;
           
           const img = document.createElement('img');
-          img.src = displayedImages[i];
           img.alt = `Image ${i+1}`;
-          img.style.filter = 'grayscale(100%)'; // Apply black and white filter
+          img.style.filter = 'grayscale(100%)';
+          img.onload = () => img.classList.add('img-loaded');
+          img.onerror = () => img.classList.add('img-loaded'); // show broken img rather than hiding
+          img.src = displayedImages[i]; // set src last so onload fires correctly
           
           gridItem.appendChild(img);
           gridContainer.appendChild(gridItem);
@@ -1038,14 +1101,14 @@
           };
           
           p.setup = function() {
-            p.createCanvas(800, 900);
+            p.createCanvas(512, 512);
             p.canvas.style.display = 'none';
-            
+
             // Initialize ComfyUI helper
             comfy = new ComfyUiP5Helper(COMFY_URL);
-            
-            // Create source image graphics
-            srcImg = p.createGraphics(800, 900);
+
+            // 512×512 — smaller canvas = faster VAE encode/decode in ComfyUI
+            srcImg = p.createGraphics(512, 512);
             
             // Load the selected image
             p5SelectedImage = p.loadImage(selectedImageSrc, () => {
@@ -1074,8 +1137,8 @@
               return;
             }
             
-            // Prepare source image for generation
-            srcImg.image(p5CapturedImage, 0, 0, 800, 900);
+            // Prepare source image for generation at 512×512
+            srcImg.image(p5CapturedImage, 0, 0, 512, 512);
             
             // Replace the LoadImage node with our source image
             workflow[1] = comfy.image(srcImg);
@@ -1202,6 +1265,9 @@
           // Store in localStorage as backup
           localStorage.setItem('lastGeneratedImage', generatedImageSrc);
           debug("Saved image to localStorage");
+
+          // Sync history so other browsers pick up the new image
+          syncHistoryFromComfyUI();
         }
         
         const receiptContainer = document.getElementById('receipt-interface');
@@ -1305,22 +1371,16 @@
         selectedTile = null;
         clearCountdown();
 
-        // Add generated image to the images array if it exists
-        if (lastGeneratedImageUrl && lastGeneratedImageUrl.trim() !== '') {
-          debug("Adding last generated image to the grid: " + lastGeneratedImageUrl);
-          
-          // If we already have the max number of images, replace a random one
-          if (images.length >= config.imageCount) {
-            const randomIndex = Math.floor(Math.random() * images.length);
-            debug(`Replacing image at index ${randomIndex} with generated image`);
-            images[randomIndex] = lastGeneratedImageUrl;
-          } else {
-            // Otherwise just add it
-            images.push(lastGeneratedImageUrl);
-          }
+        // Ensure the latest generated image is in the pool immediately
+        // (sync is async and may not have finished yet)
+        if (lastGeneratedImageUrl && !images.includes(lastGeneratedImageUrl)) {
+          images.push(lastGeneratedImageUrl);
         }
-        
-        // Reinitialize grid
+
+        // Reset to recency-first mode for the next round
+        shuffleMode = false;
+
+        // Reinitialize grid — sync will de-dupe and add older history in the background
         initializeGrid();
       }
       
@@ -1342,7 +1402,10 @@
         
         debug("Initializing application");
         preloadImages();
-        initializeGrid();
+        // Sync history first so the grid shows past generations on the first render.
+        // Fall back to local images immediately if sync fails or ComfyUI is offline.
+        initializeGrid(); // show local images immediately while sync runs
+        syncHistoryFromComfyUI(); // re-renders grid when history arrives
         // Ensure switch camera button is available even if webcam init fails
         try { addCameraSwitchButton(); } catch(e) { debug('addCameraSwitchButton error: ' + e.message); }
         initWebcam();
@@ -1409,11 +1472,9 @@
         // Handle shuffle button click
         document.getElementById('shuffle-button').addEventListener('click', function() {
           debug("Shuffle button clicked");
-          // Clear any selected tile and countdown
           selectedTile = null;
           clearCountdown();
-          
-          // Reinitialize grid
+          shuffleMode = true;
           initializeGrid();
         });
 

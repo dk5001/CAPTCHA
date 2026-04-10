@@ -8,5 +8,13 @@
 // Both tunnels give you an https://*.trycloudflare.com URL — paste them here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const COMFY_URL = "https://remark-calculation-choice-alleged.trycloudflare.com";
-const PROMPT_SERVER_URL = null; // disabled — Ollama prompt enhancer not in use
+let COMFY_URL = "https://remark-calculation-choice-alleged.trycloudflare.com";
+let PROMPT_SERVER_URL = null; // disabled — Ollama prompt enhancer not in use
+
+// Allow ?comfy=https://... URL param to override COMFY_URL without a push.
+// Useful when the tunnel URL changes: share evolvingportrait.me?comfy=<new-url>
+// and all devices use the new URL immediately.
+(function () {
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('comfy')) COMFY_URL = p.get('comfy');
+})();
