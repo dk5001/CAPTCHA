@@ -3,6 +3,7 @@
   <head>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.10.0/p5.js"></script>
     <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
+    <script src="config.js"></script>
     <script src="p5.comfyui-helper.js"></script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -11,20 +12,22 @@
       body {
         margin: 0;
         padding: 0;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
         width: 100%;
-        height: 100vh;
+        min-height: 100vh;
         display: flex;
         justify-content: center;
-        align-items: center;
+        align-items: flex-start;
         background-color: #000000;
         font-family: Arial, sans-serif;
       }
 
       #interface-container {
         position: relative;
-        width: 800px;
-        height: 900px;
+        width: 100%;
+        max-width: 800px;
+        height: 100vh;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -42,27 +45,30 @@
       }
 
       .checkbox-container {
-        width: 480px;
-        height: 120px;
+        width: min(480px, 90vw);
+        min-height: 80px;
         background-color: #f0f0f0;
         border-radius: 10px;
         display: flex;
         align-items: center;
-        padding: 0 20px;
+        padding: 16px 20px;
+        box-sizing: border-box;
       }
 
       .checkbox-wrapper {
         display: flex;
         align-items: center;
         flex: 1;
+        min-width: 0;
       }
 
       .checkbox {
         width: 30px;
         height: 30px;
+        flex-shrink: 0;
         border: 2px solid #000;
         background-color: #000;
-        margin-right: 40px;
+        margin-right: clamp(14px, 5vw, 40px);
         position: relative;
         cursor: pointer;
       }
@@ -78,14 +84,15 @@
       }
 
       .checkbox-text {
-        font-size: 24px;
+        font-size: clamp(16px, 5vw, 24px);
         color: #000;
       }
 
       .cog-icon {
-        width: 100px;
-        height: 100px;
+        width: clamp(56px, 12vw, 100px);
+        height: clamp(56px, 12vw, 100px);
         margin-left: auto;
+        flex-shrink: 0;
       }
 
       /* Question Interface */
@@ -101,26 +108,28 @@
       }
 
       .question-container {
-        width: 480px;
+        width: min(480px, 90vw);
         background-color: #f0f0f0;
         border-radius: 10px;
-        padding: 30px;
+        padding: 24px 20px;
         text-align: center;
+        box-sizing: border-box;
       }
 
       .question-text {
-        font-size: 28px;
+        font-size: clamp(18px, 5vw, 28px);
         color: #000;
-        margin-bottom: 30px;
+        margin-bottom: 24px;
       }
 
       .question-input {
         width: 100%;
         padding: 12px;
-        font-size: 20px;
+        font-size: clamp(16px, 4vw, 20px);
         border: 2px solid #000;
         border-radius: 5px;
         margin-bottom: 20px;
+        box-sizing: border-box;
       }
 
       .question-back-button {
@@ -135,7 +144,7 @@
         border: 2px solid #646464;
         outline: 2px solid white;
       }
-      
+
       /* Grid Interface */
       #grid-interface {
         position: absolute;
@@ -148,32 +157,35 @@
 
       .header {
         width: 100%;
-        height: 160px;
+        min-height: 80px;
         background-color: #646464;
         display: flex;
         justify-content: center;
         align-items: center;
-        margin-bottom: 40px;
+        padding: 16px 20px;
+        margin-bottom: clamp(16px, 4vw, 40px);
+        box-sizing: border-box;
       }
 
       .header-text {
         color: white;
-        font-size: 36px;
+        font-size: clamp(18px, 4.5vw, 36px);
         text-align: center;
       }
 
       .grid-container {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 10px;
+        gap: clamp(4px, 1.5vw, 10px);
+        width: min(630px, 96vw);
       }
 
       .grid-item {
-        width: 200px;
-        height: 200px;
+        aspect-ratio: 1;
         border: 3px solid white;
         cursor: pointer;
         position: relative;
+        overflow: hidden;
       }
 
       .grid-item img {
@@ -219,18 +231,157 @@
       }
 
       .countdown {
-        position: absolute;
-        top: 180px;
+        position: relative;
         width: 100%;
         text-align: center;
         color: black;
-        font-size: 24px;
+        font-size: clamp(14px, 4vw, 24px);
         opacity: 0;
         transition: opacity 0.3s;
+        margin: 8px 0;
       }
 
       .countdown.visible {
         opacity: 1;
+      }
+
+      /* Receipt interface */
+      #receipt-interface {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        overflow-y: auto;
+        background-color: white;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 16px;
+        box-sizing: border-box;
+      }
+
+      .receipt-header {
+        font-size: clamp(20px, 5vw, 32px);
+        font-weight: bold;
+        margin-bottom: 16px;
+        text-align: center;
+      }
+
+      .receipt-meta {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        gap: clamp(16px, 5vw, 40px);
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+        font-size: clamp(13px, 3vw, 16px);
+      }
+
+      .receipt-user-id {
+        font-weight: bold;
+        font-size: clamp(14px, 4vw, 19px);
+        color: #cc0000;
+        text-align: center;
+      }
+
+      .receipt-images {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: clamp(12px, 3vw, 20px);
+        margin-bottom: 24px;
+        width: 100%;
+      }
+
+      .receipt-image-block {
+        text-align: center;
+        font-size: clamp(13px, 3vw, 16px);
+      }
+
+      .receipt-image-block h3 {
+        margin: 0 0 8px 0;
+        font-size: clamp(13px, 3.5vw, 18px);
+      }
+
+      .receipt-img {
+        width: min(240px, 80vw);
+        height: min(240px, 80vw);
+        object-fit: cover;
+        border: 1px solid #ccc;
+        display: block;
+      }
+
+      .receipt-img-placeholder {
+        width: min(240px, 80vw);
+        height: min(240px, 80vw);
+        border: 1px solid #ccc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: clamp(12px, 3vw, 15px);
+        color: #666;
+      }
+
+      @media (min-width: 600px) {
+        .receipt-img,
+        .receipt-img-placeholder {
+          width: min(240px, 28vw);
+          height: min(240px, 28vw);
+        }
+      }
+
+      .receipt-footer {
+        text-align: center;
+        margin-top: 8px;
+        font-size: clamp(13px, 3vw, 16px);
+      }
+
+      .receipt-footer p {
+        margin: 6px 0;
+      }
+
+      .receipt-reset-btn {
+        background-color: #0066cc;
+        color: white;
+        border: none;
+        padding: 12px 28px;
+        border-radius: 5px;
+        margin-top: 16px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: clamp(14px, 3.5vw, 16px);
+      }
+
+      /* Loading state */
+      .loading-images {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: clamp(16px, 5vw, 40px);
+        margin-top: 20px;
+      }
+
+      .loading-img-block {
+        text-align: center;
+        font-size: clamp(13px, 3vw, 16px);
+      }
+
+      .loading-img-block h3 {
+        margin: 0 0 8px 0;
+      }
+
+      .loading-thumb {
+        width: min(240px, 80vw);
+        height: min(240px, 80vw);
+        object-fit: cover;
+        position: relative;
+        border: 1px solid #ccc;
+      }
+
+      @media (min-width: 600px) {
+        .loading-thumb {
+          width: 240px;
+          height: 240px;
+        }
       }
     </style>
   </head>
@@ -352,8 +503,9 @@
           return;
         }
 
-        // Request permission first - this helps with device enumeration
-        navigator.mediaDevices.getUserMedia({ video: true })
+        // Request permission first — prefer front camera on mobile
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        navigator.mediaDevices.getUserMedia({ video: isMobile ? { facingMode: "user" } : true })
           .then(function(stream) {
             debug("Initial camera permission granted - now will enumerate devices");
             // Stop this initial stream - we'll create a new one after selecting the right camera
@@ -405,11 +557,13 @@
             
             function initWebcamDirectly() {
         debug("Trying to initialize webcam directly without device selection");
-        navigator.mediaDevices.getUserMedia({ 
-          video: { 
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: isMobile ? "user" : undefined,
             width: { ideal: 1280 },
             height: { ideal: 720 }
-          } 
+          }
         })
         .then(function(stream) {
           debug("Default webcam access granted");
@@ -841,102 +995,28 @@
         // Create receipt container
         const receiptContainer = document.createElement('div');
         receiptContainer.id = 'receipt-interface';
-        receiptContainer.style.position = 'absolute';
-        receiptContainer.style.width = '100%';
-        receiptContainer.style.height = '100%';
-        receiptContainer.style.backgroundColor = 'white';
-        receiptContainer.style.display = 'flex';
-        receiptContainer.style.flexDirection = 'column';
-        receiptContainer.style.alignItems = 'center';
-        receiptContainer.style.justifyContent = 'center';
-        
-        // Add loading message
-        const loadingMsg = document.createElement('div');
-        loadingMsg.innerHTML = `
-          <h2 style="margin-bottom: 30px;">Processing Your Images</h2>
-          <p style="margin-bottom: 40px;">Please wait while we generate your results...</p>
-        `;
-        receiptContainer.appendChild(loadingMsg);
-        
-        // Add container for the pulsing images
-        const imagesContainer = document.createElement('div');
-        imagesContainer.id = 'loading-images-container';
-        imagesContainer.style.display = 'flex';
-        imagesContainer.style.justifyContent = 'center';
-        imagesContainer.style.gap = '40px';
-        imagesContainer.style.marginTop = '20px';
 
-        // Add selected image
-        const selectedImgContainer = document.createElement('div');
-        selectedImgContainer.innerHTML = `
-          <h3 style="text-align: center; margin-bottom: 10px;">Selected Face</h3>
-          <div id="selected-img-pulse" style="
-            width: 240px;
-            height: 240px;
-            position: relative;
-            border: 1px solid #ccc;
-          ">
-            <img src="${selectedImageSrc}" style="
-              width: 100%;
-              height: 100%;
-              object-fit: cover;
-              position: relative;
-              z-index: 1;
-            ">
-            <div id="selected-img-glow" style="
-              position: absolute;
-              top: 0;
-              left: 0;
-              width: 100%;
-              height: 100%;
-              background-color: rgba(255, 0, 0, 0);
-              z-index: 2;
-              pointer-events: none;
-            "></div>
+        receiptContainer.innerHTML = `
+          <h2 style="margin-bottom: 16px; font-size: clamp(18px,5vw,26px);">Processing Your Images</h2>
+          <p style="margin-bottom: 24px; font-size: clamp(13px,3vw,16px);">Please wait while we generate your results...</p>
+          <div class="loading-images">
+            <div class="loading-img-block">
+              <h3>Selected Face</h3>
+              <div class="loading-thumb" style="position:relative;">
+                <img src="${selectedImageSrc}" style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1;">
+                <div id="selected-img-glow" style="position:absolute;top:0;left:0;width:100%;height:100%;background-color:rgba(255,0,0,0);z-index:2;pointer-events:none;"></div>
+              </div>
+            </div>
+            <div class="loading-img-block">
+              <h3>Your Face</h3>
+              <div class="loading-thumb" style="position:relative;">
+                <img src="${capturedImage.src}" style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1;">
+                <div id="captured-img-glow" style="position:absolute;top:0;left:0;width:100%;height:100%;background-color:rgba(255,0,0,0);z-index:2;pointer-events:none;"></div>
+              </div>
+            </div>
           </div>
+          <div id="generation-status" style="margin-top:32px;font-style:italic;font-size:clamp(13px,3vw,16px);">Initializing generation...</div>
         `;
-        
-        // Add captured image
-        const capturedImgContainer = document.createElement('div');
-        capturedImgContainer.innerHTML = `
-          <h3 style="text-align: center; margin-bottom: 10px;">Your Face</h3>
-          <div id="captured-img-pulse" style="
-            width: 240px;
-            height: 240px;
-            position: relative;
-            border: 1px solid #ccc;
-          ">
-            <img src="${capturedImage.src}" style="
-              width: 100%;
-              height: 100%;
-              object-fit: cover;
-              position: relative;
-              z-index: 1;
-            ">
-            <div id="captured-img-glow" style="
-              position: absolute;
-              top: 0;
-              left: 0;
-              width: 100%;
-              height: 100%;
-              background-color: rgba(255, 0, 0, 0);
-              z-index: 2;
-              pointer-events: none;
-            "></div>
-          </div>
-        `;
-
-        imagesContainer.appendChild(selectedImgContainer);
-        imagesContainer.appendChild(capturedImgContainer);
-        receiptContainer.appendChild(imagesContainer);
-        
-        // Add a status message that will update
-        const statusMsg = document.createElement('div');
-        statusMsg.id = 'generation-status';
-        statusMsg.style.marginTop = '40px';
-        statusMsg.style.fontStyle = 'italic';
-        statusMsg.textContent = 'Initializing generation...';
-        receiptContainer.appendChild(statusMsg);
         
         document.getElementById('interface-container').appendChild(receiptContainer);
         
@@ -970,7 +1050,7 @@
             p.canvas.style.display = 'none';
             
             // Initialize ComfyUI helper
-            comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");
+            comfy = new ComfyUiP5Helper(COMFY_URL);
             
             // Create source image graphics
             srcImg = p.createGraphics(800, 900);
@@ -1013,15 +1093,15 @@
             // Set the text prompt with user input
             let promptText = "person, black and white image";
             
-            if (userInput) {
+            if (userInput && PROMPT_SERVER_URL) {
               try {
                 debug("Calling prompt server with: " + userInput);
-                const response = await fetch("http://127.0.0.1:8088", {
+                const response = await fetch(PROMPT_SERVER_URL, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ text: userInput })
                 });
-                
+
                 if (response.ok) {
                   const data = await response.json();
                   if (data.prompt) {
@@ -1038,6 +1118,8 @@
                 debug("Error calling prompt server: " + e.message);
                 promptText = `${userInput} in a form of a human, black and white image`;
               }
+            } else if (userInput) {
+              promptText = `${userInput} in a form of a human, black and white image`;
             }
             
             debug(`Setting prompt text to: "${promptText}"`);
@@ -1159,53 +1241,43 @@
         receiptContainer.innerHTML = '';
         
         // Set up receipt content
+        const userId = jsonFilename ? jsonFilename.replace('subject_', '') : Math.floor(100000 + Math.random() * 900000);
         receiptContainer.innerHTML = `
-          <h1 style="margin-bottom: 20px;">GENERATION RESULTS</h1>
-          
-          <div style="width: 100%; display: flex; justify-content: center; gap: 40px; margin-bottom: 20px;">
+          <h1 class="receipt-header">GENERATION RESULTS</h1>
+
+          <div class="receipt-meta">
             <div>
-              <p>Date: ${new Date().toLocaleDateString()}</p>
-              <p>Time: ${new Date().toLocaleTimeString()}</p>
+              <p style="margin:4px 0;">Date: ${new Date().toLocaleDateString()}</p>
+              <p style="margin:4px 0;">Time: ${new Date().toLocaleTimeString()}</p>
             </div>
-            <div style="font-weight: bold; font-size: 1.2em; color: #cc0000; text-align: center;">
-              <p>User ID: ${jsonFilename ? jsonFilename.replace('subject_', '') : Math.floor(100000 + Math.random() * 900000)}</p>
+            <div class="receipt-user-id">
+              <p style="margin:4px 0;">User ID: ${userId}</p>
             </div>
           </div>
-          
-          <hr style="width: 100%; margin: 10px 0 20px 0;">
-          
-          <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-bottom: 30px;">
-            <div style="text-align: center;">
+
+          <hr style="width: 100%; margin: 10px 0 16px 0;">
+
+          <div class="receipt-images">
+            <div class="receipt-image-block">
               <h3>Selected Image</h3>
-              <img src="${selectedImageSrc}" style="width: 240px; height: 240px; object-fit: cover; border: 1px solid #ccc;">
+              <img src="${selectedImageSrc}" class="receipt-img">
             </div>
-            
-            <div style="text-align: center;">
-              <h3>User Info</h3>
-              <img src="${capturedImage.src}" style="width: 240px; height: 240px; object-fit: cover; border: 1px solid #ccc;">
+            <div class="receipt-image-block">
+              <h3>Your Face</h3>
+              <img src="${capturedImage.src}" class="receipt-img">
             </div>
-            
-            <div style="text-align: center;">
+            <div class="receipt-image-block">
               <h3>Generated Image</h3>
-              ${generatedImageSrc 
-                ? `<img src="${generatedImageSrc}" style="width: 240px; height: 240px; object-fit: cover; border: 1px solid #ccc;">` 
-                : `<div style="width: 240px; height: 240px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center;">Generation failed</div>`}
+              ${generatedImageSrc
+                ? `<img src="${generatedImageSrc}" class="receipt-img">`
+                : `<div class="receipt-img-placeholder">Generation failed</div>`}
             </div>
           </div>
-          
-          <div style="margin-top: 30px; text-align: center;">
+
+          <div class="receipt-footer">
             <p>Thank you for contributing to our collective face</p>
             <p>This project is constantly evolving to reflect our unconsciousness and biases</p>
-            <button id="reset-button" style="
-              background-color: #0066cc;
-              color: white;
-              border: none;
-              padding: 10px 20px;
-              border-radius: 5px;
-              margin-top: 20px;
-              cursor: pointer;
-              font-weight: bold;
-            ">Start Over</button>
+            <button id="reset-button" class="receipt-reset-btn">Start Over</button>
           </div>
         `;
         

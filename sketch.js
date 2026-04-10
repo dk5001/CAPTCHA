@@ -41,7 +41,7 @@ function setup() {
   srcImg = createGraphics(config.canvasWidth, config.canvasHeight);
   
   // Initialize ComfyUI helper
-  comfy = new ComfyUiP5Helper("http://127.0.0.1:8188/");
+  comfy = new ComfyUiP5Helper(COMFY_URL);
   console.log("workflow is", workflow);
   logWorkflowDetails(); // Debug workflow structure
   
