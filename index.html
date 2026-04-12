@@ -256,9 +256,8 @@
 
       /* Receipt interface */
       #receipt-interface {
-        position: absolute;
-        width: 100%;
-        height: 100%;
+        position: fixed;
+        inset: 0;
         overflow-y: auto;
         background-color: white;
         display: flex;
@@ -266,6 +265,7 @@
         align-items: center;
         padding: 20px 16px;
         box-sizing: border-box;
+        z-index: 100;
       }
 
       .receipt-header {
@@ -294,34 +294,42 @@
 
       .receipt-images {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         justify-content: center;
-        gap: clamp(12px, 3vw, 20px);
+        gap: clamp(6px, 2vw, 14px);
         margin-bottom: 24px;
         width: 100%;
       }
 
       .receipt-image-block {
+        flex: 1;
+        min-width: 0;
         text-align: center;
-        font-size: clamp(13px, 3vw, 16px);
+        font-size: clamp(11px, 2.5vw, 15px);
       }
 
       .receipt-image-block h3 {
-        margin: 0 0 8px 0;
-        font-size: clamp(13px, 3.5vw, 18px);
+        margin: 0 0 6px 0;
+        font-size: clamp(11px, 3vw, 16px);
       }
 
       .receipt-img {
-        width: min(200px, 28vw);
-        height: min(200px, 28vw);
+        width: 100%;
+        aspect-ratio: 1;
         object-fit: cover;
         border: 1px solid #ccc;
         display: block;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .receipt-img.img-loaded {
+        opacity: 1;
       }
 
       .receipt-img-placeholder {
-        width: min(200px, 28vw);
-        height: min(200px, 28vw);
+        width: 100%;
+        aspect-ratio: 1;
         border: 1px solid #ccc;
         display: flex;
         align-items: center;
@@ -355,27 +363,57 @@
       /* Loading state */
       .loading-images {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         justify-content: center;
-        gap: clamp(16px, 5vw, 40px);
+        gap: clamp(6px, 2vw, 14px);
         margin-top: 20px;
+        width: 100%;
       }
 
       .loading-img-block {
+        flex: 1;
+        min-width: 0;
         text-align: center;
-        font-size: clamp(13px, 3vw, 16px);
+        font-size: clamp(11px, 2.5vw, 15px);
       }
 
       .loading-img-block h3 {
-        margin: 0 0 8px 0;
+        margin: 0 0 6px 0;
+        font-size: clamp(11px, 3vw, 16px);
       }
 
       .loading-thumb {
-        width: min(200px, 40vw);
-        height: min(200px, 40vw);
+        width: 100%;
+        aspect-ratio: 1;
         object-fit: cover;
         position: relative;
         border: 1px solid #ccc;
+        overflow: hidden;
+      }
+
+      .loading-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .loading-thumb-placeholder {
+        width: 100%;
+        aspect-ratio: 1;
+        border: 2px dashed #999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: clamp(10px, 2.5vw, 13px);
+        color: #999;
+        animation: pulse-placeholder 1.5s ease-in-out infinite;
+        box-sizing: border-box;
+      }
+
+      @keyframes pulse-placeholder {
+        0%, 100% { border-color: #ccc; color: #ccc; }
+        50% { border-color: #666; color: #666; }
       }
     </style>
   </head>
@@ -449,6 +487,7 @@
       }
       
       // Load past generated images from ComfyUI history so all browsers share the same pool
+      const MAX_GENERATED = 30; // FIFO cap — oldest dropped when exceeded
       let _syncInProgress = false;
       async function syncHistoryFromComfyUI() {
         if (!COMFY_URL || _syncInProgress) return;
@@ -480,6 +519,13 @@
               }
             }
           }
+
+          // FIFO cap: trim oldest generated images beyond MAX_GENERATED
+          const generated = images.slice(config.imageCount);
+          if (generated.length > MAX_GENERATED) {
+            images.splice(config.imageCount, generated.length - MAX_GENERATED);
+          }
+
           debug("Synced " + added + " images from ComfyUI history");
           if (added > 0) initializeGrid();
         } catch (e) {
@@ -512,13 +558,21 @@
 
         if (shuffleMode) {
           // Full random mix from everything
-          displayedImages = shuffleArray([...new Set(images)]).slice(0, gridSlots);
+          const pool = generatedImgs.length >= gridSlots
+            ? generatedImgs                          // enough history — no placeholders in shuffle
+            : [...new Set(images)];
+          displayedImages = shuffleArray([...pool]).slice(0, gridSlots);
         } else {
-          // Default: most recent generated faces first (sequential, newest last-in-array = top-left)
-          const recentGenerated = generatedImgs.slice(-gridSlots).reverse(); // newest at index 0
-          const fillCount = gridSlots - recentGenerated.length;
-          const localFill = shuffleArray([...localImgs]).slice(0, fillCount);
-          displayedImages = [...recentGenerated, ...localFill];
+          // Default: most recent generated faces first, oldest at end
+          const recentGenerated = generatedImgs.slice(-gridSlots).reverse();
+          if (recentGenerated.length >= gridSlots) {
+            // Enough history — show only generated, no placeholders
+            displayedImages = recentGenerated;
+          } else {
+            const fillCount = gridSlots - recentGenerated.length;
+            const localFill = shuffleArray([...localImgs]).slice(0, fillCount);
+            displayedImages = [...recentGenerated, ...localFill];
+          }
         }
         
         // Create grid items
@@ -640,7 +694,7 @@
         video.muted = true;
         
         // Apply rotation: 90 degrees clockwise + horizontal flip
-        video.style.transform = 'scaleX(-1) rotate(90deg)';
+        video.style.transform = 'scaleX(-1)';
         
         // Apply CSS filter to make the video black and white
         video.style.filter = 'grayscale(100%)';
@@ -662,24 +716,21 @@
           switchButton = document.createElement('button');
           switchButton.id = 'camera-switch-btn';
           switchButton.textContent = 'Switch Camera';
-                    switchButton.style.position = 'fixed';
-                    switchButton.style.bottom = '12px';
-                    switchButton.style.right = '12px';
-                    switchButton.style.zIndex = '2147483647'; // very high
-                    switchButton.style.padding = '10px 14px';
-                    switchButton.style.backgroundColor = '#ff5722'; // bright orange
-                    switchButton.style.color = 'white';
-                    switchButton.style.border = '2px solid #fff';
-                    switchButton.style.borderRadius = '6px';
-                    switchButton.style.fontSize = '14px';
-                    switchButton.style.boxShadow = '0 6px 18px rgba(0,0,0,0.6)';
-          document.body.appendChild(switchButton);
-        } else {
-          switchButton.style.display = 'block';
-          // make visible and prominent
+          switchButton.style.position = 'fixed';
+          switchButton.style.bottom = '12px';
+          switchButton.style.right = '12px';
+          switchButton.style.zIndex = '2147483647';
+          switchButton.style.padding = '10px 14px';
           switchButton.style.backgroundColor = '#ff5722';
           switchButton.style.color = 'white';
-          switchButton.style.zIndex = '2147483647';
+          switchButton.style.border = '2px solid #fff';
+          switchButton.style.borderRadius = '6px';
+          switchButton.style.fontSize = '14px';
+          switchButton.style.boxShadow = '0 6px 18px rgba(0,0,0,0.6)';
+          switchButton.style.display = 'none'; // hidden until debug mode (press D)
+          document.body.appendChild(switchButton);
+        } else {
+          // Leave visibility managed by debug mode toggle; don't force show
           if (!document.body.contains(switchButton)) document.body.appendChild(switchButton);
         }
 
@@ -859,7 +910,7 @@
               videoClone.style.width = "100%";
               videoClone.style.height = "100%";
               videoClone.style.objectFit = "cover";
-              videoClone.style.transform = "scaleX(-1) rotate(90deg)"; // Mirror and rotate
+              videoClone.style.transform = "scaleX(-1)"; // Mirror (front camera is already upright)
               videoClone.autoplay = true;
               videoClone.muted = true;
               videoClone.play().catch(e => debug("Video clone play error: " + e.message));
@@ -942,19 +993,18 @@
           // Create an image from the canvas
           const capturedImage = new Image();
           capturedImage.onload = function() {
-            // Replace the video with the captured image
-            const videoElement = selectedTile.querySelector('video');
-            if (videoElement) {
-              videoElement.remove();
-            }
-            
-            // Remove original image
-            const originalImage = selectedTile.querySelector('img');
-            if (originalImage) {
-              originalImage.remove();
-            }
-            
+            // Mark as loaded immediately — data URLs are already decoded, no fade needed
+            capturedImage.classList.add('img-loaded');
+
+            // Append captured image FIRST so there's no black gap
             selectedTile.appendChild(capturedImage);
+
+            // Now remove the video and original image underneath
+            const videoElement = selectedTile.querySelector('video');
+            if (videoElement) videoElement.remove();
+            const originalImage = selectedTile.querySelector('img:not([class*="img-loaded"])');
+            if (originalImage && originalImage !== capturedImage) originalImage.remove();
+
             selectedTile.classList.remove('webcam-active');
             
             debug("Image captured and displayed");
@@ -1052,25 +1102,29 @@
         receiptContainer.id = 'receipt-interface';
 
         receiptContainer.innerHTML = `
-          <h2 style="margin-bottom: 16px; font-size: clamp(18px,5vw,26px);">Processing Your Images</h2>
-          <p style="margin-bottom: 24px; font-size: clamp(13px,3vw,16px);">Please wait while we generate your results...</p>
+          <h2 style="margin-bottom: 12px; font-size: clamp(18px,5vw,26px);">Processing Your Images</h2>
+          <p style="margin-bottom: 16px; font-size: clamp(13px,3vw,16px);">Please wait while we generate your results...</p>
           <div class="loading-images">
             <div class="loading-img-block">
               <h3>Selected Face</h3>
               <div class="loading-thumb" style="position:relative;">
-                <img src="${selectedImageSrc}" style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1;">
+                <img src="${selectedImageSrc}">
                 <div id="selected-img-glow" style="position:absolute;top:0;left:0;width:100%;height:100%;background-color:rgba(255,0,0,0);z-index:2;pointer-events:none;"></div>
               </div>
             </div>
             <div class="loading-img-block">
               <h3>Your Face</h3>
               <div class="loading-thumb" style="position:relative;">
-                <img src="${capturedImage.src}" style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1;">
+                <img src="${capturedImage.src}">
                 <div id="captured-img-glow" style="position:absolute;top:0;left:0;width:100%;height:100%;background-color:rgba(255,0,0,0);z-index:2;pointer-events:none;"></div>
               </div>
             </div>
+            <div class="loading-img-block">
+              <h3>Generated Image</h3>
+              <div class="loading-thumb-placeholder">Generating...</div>
+            </div>
           </div>
-          <div id="generation-status" style="margin-top:32px;font-style:italic;font-size:clamp(13px,3vw,16px);">Initializing generation...</div>
+          <div id="generation-status" style="margin-top:20px;font-style:italic;font-size:clamp(13px,3vw,16px);">Initializing generation...</div>
         `;
         
         document.getElementById('interface-container').appendChild(receiptContainer);
@@ -1266,7 +1320,12 @@
           localStorage.setItem('lastGeneratedImage', generatedImageSrc);
           debug("Saved image to localStorage");
 
-          // Sync history so other browsers pick up the new image
+          // Pre-warm the grid NOW while the user reads the receipt
+          if (!images.includes(generatedImageSrc)) images.push(generatedImageSrc);
+          shuffleMode = false;
+          initializeGrid();
+
+          // Sync history so other browsers pick up the new image and grid gets updated
           syncHistoryFromComfyUI();
         }
         
@@ -1296,16 +1355,16 @@
           <div class="receipt-images">
             <div class="receipt-image-block">
               <h3>Selected Image</h3>
-              <img src="${selectedImageSrc}" class="receipt-img">
+              <img src="${selectedImageSrc}" class="receipt-img" onload="this.classList.add('img-loaded')" onerror="this.classList.add('img-loaded')">
             </div>
             <div class="receipt-image-block">
               <h3>Your Face</h3>
-              <img src="${capturedImage.src}" class="receipt-img">
+              <img src="${capturedImage.src}" class="receipt-img" onload="this.classList.add('img-loaded')" onerror="this.classList.add('img-loaded')">
             </div>
             <div class="receipt-image-block">
               <h3>Generated Image</h3>
               ${generatedImageSrc
-                ? `<img src="${generatedImageSrc}" class="receipt-img">`
+                ? `<img src="${generatedImageSrc}" class="receipt-img" onload="this.classList.add('img-loaded')" onerror="this.classList.add('img-loaded')">`
                 : `<div class="receipt-img-placeholder">Generation failed</div>`}
             </div>
           </div>
@@ -1371,17 +1430,8 @@
         selectedTile = null;
         clearCountdown();
 
-        // Ensure the latest generated image is in the pool immediately
-        // (sync is async and may not have finished yet)
-        if (lastGeneratedImageUrl && !images.includes(lastGeneratedImageUrl)) {
-          images.push(lastGeneratedImageUrl);
-        }
-
-        // Reset to recency-first mode for the next round
+        // Grid is already pre-warmed in updateReceiptWithResults; just reset shuffle mode
         shuffleMode = false;
-
-        // Reinitialize grid — sync will de-dupe and add older history in the background
-        initializeGrid();
       }
       
       // Clear countdown timer
@@ -1413,8 +1463,9 @@
         // Initialize BroadcastChannel for display window communication
         displayChannel = new BroadcastChannel('captcha_generation');
         
-        // Add button to open display window
+        // Add button to open display window (hidden by default; press D to toggle debug mode)
         const openDisplayBtn = document.createElement('button');
+        openDisplayBtn.id = 'open-display-btn';
         openDisplayBtn.textContent = 'Open Display Window';
         openDisplayBtn.style.position = 'fixed';
         openDisplayBtn.style.top = '10px';
@@ -1426,24 +1477,40 @@
         openDisplayBtn.style.border = 'none';
         openDisplayBtn.style.borderRadius = '5px';
         openDisplayBtn.style.cursor = 'pointer';
-        
+        openDisplayBtn.style.display = 'none'; // hidden until debug mode
+
         openDisplayBtn.addEventListener('click', () => {
             window.open('display.html', 'DisplayWindow', 'width=800,height=600');
         });
-        
+
         document.body.appendChild(openDisplayBtn);
+
+        // Press D to toggle debug overlay buttons
+        let debugMode = false;
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'd' || e.key === 'D') {
+            debugMode = !debugMode;
+            const displayBtnEl = document.getElementById('open-display-btn');
+            const switchBtnEl = document.getElementById('camera-switch-btn');
+            const show = debugMode ? 'block' : 'none';
+            if (displayBtnEl) displayBtnEl.style.display = show;
+            if (switchBtnEl) switchBtnEl.style.display = show;
+            debug('Debug mode: ' + (debugMode ? 'ON' : 'OFF'));
+          }
+        });
         
         // Handle checkbox click
         document.getElementById('rational-checkbox').addEventListener('click', function() {
           debug("Checkbox clicked");
           this.classList.add('checked');
-          
-          // Wait for specified time before showing grid interface
-          setTimeout(() => {
+
+          const showGrid = () => {
             debug("Transitioning to grid interface");
             document.getElementById('checkbox-interface').style.display = 'none';
             document.getElementById('grid-interface').style.display = 'flex';
-          }, config.checkboxWaitTime);
+          };
+
+          setTimeout(showGrid, config.checkboxWaitTime);
         });
 
         // Handle question input
