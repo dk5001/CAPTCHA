@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Evolving Portrait — Archive</title>
+  <script src="config.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #grid {
+      display: grid;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .cell {
+      position: relative;
+      overflow: hidden;
+      background: #111;
+    }
+
+    .cell img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: grayscale(100%);
+      opacity: 0;
+      transition: opacity 0.8s ease;
+    }
+
+    .cell img.visible {
+      opacity: 1;
+    }
+
+    #status {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.25);
+      font-family: monospace;
+      font-size: 11px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="grid"></div>
+  <div id="status">Loading archive...</div>
+
+  <script>
+    // ── Config ────────────────────────────────────────────────────────────────
+    const CYCLE_INTERVAL_MS = 10000;   // how often each cell picks a new image
+    const REFRESH_INTERVAL_MS = 30000; // how often to re-fetch ComfyUI history
+    const STAGGER_MS = 600;            // delay between cells cycling (so not all at once)
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    let allImages = [];      // all generated image URLs from history
+    let cellCount = 0;       // number of cells (computed from viewport)
+    let cellPointers = [];   // index into allImages for each cell
+    let cells = [];          // DOM elements
+
+    // ── Grid layout ───────────────────────────────────────────────────────────
+    function computeGrid() {
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      const aspect = W / H;
+
+      // Pick cols so cells are roughly square; aim for ~20–40 cells
+      let cols = Math.round(Math.sqrt(40 * aspect));
+      cols = Math.max(3, Math.min(cols, 10));
+      const rows = Math.round(cols / aspect);
+      return { cols, rows };
+    }
+
+    function buildGrid() {
+      const { cols, rows } = computeGrid();
+      cellCount = cols * rows;
+
+      const grid = document.getElementById('grid');
+      grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      grid.style.gridTemplateRows    = `repeat(${rows}, 1fr)`;
+      grid.innerHTML = '';
+      cells = [];
+      cellPointers = [];
+
+      for (let i = 0; i < cellCount; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+
+        // Two <img> elements — crossfade between them
+        const imgA = document.createElement('img');
+        const imgB = document.createElement('img');
+        imgA.dataset.slot = 'A';
+        imgB.dataset.slot = 'B';
+        cell.appendChild(imgA);
+        cell.appendChild(imgB);
+        cell.dataset.active = 'A'; // which slot is currently visible
+
+        grid.appendChild(cell);
+        cells.push(cell);
+        cellPointers.push(i); // initial pointer spreads cells across history
+      }
+    }
+
+    // ── Image cycling ─────────────────────────────────────────────────────────
+    function advanceCell(cellIndex) {
+      if (allImages.length === 0) return;
+
+      const cell = cells[cellIndex];
+      const activeSlot = cell.dataset.active;
+      const nextSlot   = activeSlot === 'A' ? 'B' : 'A';
+
+      // Advance pointer (wraps around)
+      cellPointers[cellIndex] = (cellPointers[cellIndex] + 1) % allImages.length;
+      const url = allImages[cellPointers[cellIndex]];
+
+      const outgoing = cell.querySelector(`img[data-slot="${activeSlot}"]`);
+      const incoming = cell.querySelector(`img[data-slot="${nextSlot}"]`);
+
+      // Pre-load into incoming slot, then crossfade
+      incoming.onload = () => {
+        incoming.classList.add('visible');
+        outgoing.classList.remove('visible');
+        cell.dataset.active = nextSlot;
+        // Clear outgoing src to free memory after transition
+        setTimeout(() => { outgoing.src = ''; }, 1000);
+      };
+      incoming.onerror = () => {}; // skip broken images silently
+      incoming.src = url;
+    }
+
+    function startCycling() {
+      cells.forEach((_, i) => {
+        // Stagger start times so cells don't all flip at once
+        setTimeout(() => {
+          // Show first image immediately
+          advanceCell(i);
+          // Then cycle on interval
+          setInterval(() => advanceCell(i), CYCLE_INTERVAL_MS);
+        }, i * STAGGER_MS);
+      });
+    }
+
+    // ── History fetch ─────────────────────────────────────────────────────────
+    async function fetchHistory() {
+      // ── Supabase (primary — full history, CDN URLs, no 30-item cap) ──────────
+      try {
+        const res = await fetch(SUPABASE_URL + '/rest/v1/generations?select=generated_url&order=created_at.asc', {
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+        });
+        if (!res.ok) throw new Error('Supabase ' + res.status);
+        const rows = await res.json();
+
+        const seen = new Set(allImages);
+        let added = 0;
+        for (const row of rows) {
+          if (row.generated_url && !seen.has(row.generated_url)) {
+            allImages.push(row.generated_url);
+            seen.add(row.generated_url);
+            added++;
+          }
+        }
+
+        document.getElementById('status').textContent =
+          allImages.length + ' faces · updates every 30s';
+        if (added > 0) console.log('Archive: +' + added + ' from Supabase, total ' + allImages.length);
+        return; // success — skip ComfyUI fallback
+      } catch (e) {
+        console.warn('Archive Supabase error:', e.message, '— falling back to ComfyUI');
+      }
+
+      // ── ComfyUI fallback ──────────────────────────────────────────────────────
+      if (!COMFY_URL) return;
+      try {
+        const res = await fetch(COMFY_URL + '/history?max_items=30');
+        if (!res.ok) return;
+        const history = await res.json();
+
+        const seen = new Set(allImages);
+        let added = 0;
+        for (const promptId in history) {
+          const outputs = history[promptId].outputs;
+          if (!outputs) continue;
+          for (const nodeId in outputs) {
+            const imgs = outputs[nodeId].images;
+            if (!imgs) continue;
+            for (const img of imgs) {
+              if (img.type !== 'output') continue;
+              const url = COMFY_URL + '/view?filename=' + encodeURIComponent(img.filename) +
+                '&subfolder=' + encodeURIComponent(img.subfolder || '') + '&type=output';
+              if (!seen.has(url)) { allImages.push(url); seen.add(url); added++; }
+            }
+          }
+        }
+        document.getElementById('status').textContent = allImages.length + ' faces (ComfyUI) · updates every 30s';
+        if (added > 0) console.log('Archive: +' + added + ' from ComfyUI, total ' + allImages.length);
+      } catch (e) {
+        document.getElementById('status').textContent = 'Offline — retrying...';
+        console.warn('Archive ComfyUI error:', e.message);
+      }
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    async function init() {
+      buildGrid();
+      await fetchHistory();
+
+      // Spread initial cell pointers evenly across history
+      if (allImages.length > 0) {
+        const step = Math.max(1, Math.floor(allImages.length / cellCount));
+        cellPointers = cells.map((_, i) => (i * step) % allImages.length);
+      }
+
+      startCycling();
+      setInterval(fetchHistory, REFRESH_INTERVAL_MS);
+    }
+
+    // Rebuild grid on resize (e.g. rotating a tablet)
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        buildGrid();
+        if (allImages.length > 0) startCycling();
+      }, 400);
+    });
+
+    init();
+  </script>
+</body>
+</html>

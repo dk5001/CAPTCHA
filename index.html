@@ -485,19 +485,105 @@
       function debug(message) {
         console.log(`DEBUG: ${message}`);
       }
-      
-      // Load past generated images from ComfyUI history so all browsers share the same pool
+
+      // ── Supabase helpers ────────────────────────────────────────────────────
+      async function sbGet(path) {
+        const res = await fetch(SUPABASE_URL + path, {
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+        });
+        if (!res.ok) throw new Error('Supabase GET ' + res.status);
+        return res.json();
+      }
+
+      // Fetch image blob from ComfyUI and upload to Supabase Storage; returns CDN URL
+      async function sbUploadImage(comfyUrl, filename) {
+        const blob = await fetch(comfyUrl).then(r => {
+          if (!r.ok) throw new Error('ComfyUI fetch ' + r.status);
+          return r.blob();
+        });
+        debug('Blob type: ' + blob.type + ', size: ' + blob.size);
+        const up = await fetch(SUPABASE_URL + '/storage/v1/object/faces/' + filename, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_KEY,
+            'Content-Type': blob.type || 'image/png',
+            'x-upsert': 'true'
+          },
+          body: blob
+        });
+        if (!up.ok) {
+          const errText = await up.text();
+          throw new Error('Storage upload ' + up.status + ': ' + errText);
+        }
+        return SUPABASE_URL + '/storage/v1/object/public/faces/' + filename;
+      }
+
+      // Upload image to Storage + insert row — runs fire-and-forget after generation
+      async function saveToSupabase(comfyUrl, prompt, sessionId) {
+        try {
+          const cdnUrl = await sbUploadImage(comfyUrl, sessionId + '.png');
+          const ins = await fetch(SUPABASE_URL + '/rest/v1/generations', {
+            method: 'POST',
+            headers: {
+              'apikey': SUPABASE_KEY,
+              'Authorization': 'Bearer ' + SUPABASE_KEY,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({ generated_url: cdnUrl, prompt: prompt, session_id: sessionId })
+          });
+          if (!ins.ok) throw new Error('DB insert ' + ins.status);
+          // Swap the tunnel URL → CDN URL in the local pool so grid uses fast CDN
+          const idx = images.indexOf(comfyUrl);
+          if (idx !== -1) { images[idx] = cdnUrl; initializeGrid(); }
+          debug('Saved to Supabase CDN: ' + cdnUrl);
+        } catch (e) {
+          debug('Supabase save failed: ' + e.message);
+        }
+      }
+
+      // Load past generated images — Supabase primary, ComfyUI fallback
       const MAX_GENERATED = 30; // FIFO cap — oldest dropped when exceeded
       let _syncInProgress = false;
       async function syncHistoryFromComfyUI() {
-        if (!COMFY_URL || _syncInProgress) return;
+        if (_syncInProgress) return;
         _syncInProgress = true;
         try {
-          const res = await fetch(COMFY_URL + "/history?max_items=60");
+          await _doSync();
+        } finally {
+          _syncInProgress = false;
+        }
+      }
+
+      async function _doSync() {
+        // ── Supabase (primary) ────────────────────────────────────────────────
+        try {
+          const rows = await sbGet('/rest/v1/generations?select=generated_url&order=created_at.asc&limit=30');
+          const seen = new Set(images);
+          let added = 0;
+          for (const row of rows) {
+            if (row.generated_url && !seen.has(row.generated_url)) {
+              images.push(row.generated_url);
+              seen.add(row.generated_url);
+              added++;
+            }
+          }
+          const gen = images.slice(config.imageCount);
+          if (gen.length > MAX_GENERATED) images.splice(config.imageCount, gen.length - MAX_GENERATED);
+          debug('Synced ' + added + ' from Supabase, total: ' + (images.length - config.imageCount));
+          if (added > 0) initializeGrid();
+          return; // success — skip ComfyUI fallback
+        } catch (e) {
+          debug('Supabase sync failed (' + e.message + '), falling back to ComfyUI history');
+        }
+
+        // ── ComfyUI history (fallback) ────────────────────────────────────────
+        if (!COMFY_URL) return;
+        try {
+          const res = await fetch(COMFY_URL + "/history?max_items=30");
           if (!res.ok) return;
           const history = await res.json();
-
-          // Build a deduplicated set from CURRENT images array each time
           const seen = new Set(images);
           let added = 0;
           for (const promptId in history) {
@@ -509,29 +595,17 @@
               for (const img of imgs) {
                 if (img.type !== "output") continue;
                 const url = COMFY_URL + "/view?filename=" + encodeURIComponent(img.filename) +
-                  "&subfolder=" + encodeURIComponent(img.subfolder || "") +
-                  "&type=output";
-                if (!seen.has(url)) {
-                  images.push(url);
-                  seen.add(url);
-                  added++;
-                }
+                  "&subfolder=" + encodeURIComponent(img.subfolder || "") + "&type=output";
+                if (!seen.has(url)) { images.push(url); seen.add(url); added++; }
               }
             }
           }
-
-          // FIFO cap: trim oldest generated images beyond MAX_GENERATED
-          const generated = images.slice(config.imageCount);
-          if (generated.length > MAX_GENERATED) {
-            images.splice(config.imageCount, generated.length - MAX_GENERATED);
-          }
-
-          debug("Synced " + added + " images from ComfyUI history");
+          const gen = images.slice(config.imageCount);
+          if (gen.length > MAX_GENERATED) images.splice(config.imageCount, gen.length - MAX_GENERATED);
+          debug("ComfyUI fallback synced " + added + " images");
           if (added > 0) initializeGrid();
         } catch (e) {
           debug("ComfyUI history sync failed: " + e.message);
-        } finally {
-          _syncInProgress = false;
         }
       }
 
@@ -590,12 +664,16 @@
           
           gridItem.appendChild(img);
           gridContainer.appendChild(gridItem);
-          
+
           // Add click event
           gridItem.addEventListener('click', handleTileClick);
         }
+
+        // Prefetch all 9 displayed images into browser cache while grid is hidden
+        displayedImages.forEach(url => { const p = new Image(); p.src = url; });
+
         debug("Grid initialized with images");
-            }
+      }
 
             function initWebcam() {
         debug("Initializing webcam");
@@ -1320,13 +1398,14 @@
           localStorage.setItem('lastGeneratedImage', generatedImageSrc);
           debug("Saved image to localStorage");
 
-          // Pre-warm the grid NOW while the user reads the receipt
+          // Pre-warm the grid immediately with the tunnel URL; Supabase will swap it for CDN URL shortly
           if (!images.includes(generatedImageSrc)) images.push(generatedImageSrc);
           shuffleMode = false;
           initializeGrid();
 
-          // Sync history so other browsers pick up the new image and grid gets updated
-          syncHistoryFromComfyUI();
+          // Fire-and-forget: upload to Supabase Storage + save row in DB
+          // Also syncs other browsers via Supabase once the row is written
+          saveToSupabase(generatedImageSrc, userInput, jsonFilename);
         }
         
         const receiptContainer = document.getElementById('receipt-interface');
@@ -1372,6 +1451,10 @@
           <div class="receipt-footer">
             <p>Thank you for contributing to our collective face</p>
             <p>This project is constantly evolving to reflect our unconsciousness and biases</p>
+            <div style="margin: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(window.location.origin + '/archive.html')}" style="width:100px;height:100px;border:2px solid #ccc;" alt="QR code">
+              <span style="font-size: clamp(10px,2.5vw,13px); color:#666;">Scan to see the archive wall</span>
+            </div>
             <button id="reset-button" class="receipt-reset-btn">Start Over</button>
           </div>
         `;
@@ -1466,7 +1549,7 @@
         // Add button to open display window (hidden by default; press D to toggle debug mode)
         const openDisplayBtn = document.createElement('button');
         openDisplayBtn.id = 'open-display-btn';
-        openDisplayBtn.textContent = 'Open Display Window';
+        openDisplayBtn.textContent = 'Open Archive Wall';
         openDisplayBtn.style.position = 'fixed';
         openDisplayBtn.style.top = '10px';
         openDisplayBtn.style.right = '10px';
@@ -1480,7 +1563,7 @@
         openDisplayBtn.style.display = 'none'; // hidden until debug mode
 
         openDisplayBtn.addEventListener('click', () => {
-            window.open('display.html', 'DisplayWindow', 'width=800,height=600');
+            window.open('archive.html', 'ArchiveWall', 'width=1200,height=800');
         });
 
         document.body.appendChild(openDisplayBtn);
