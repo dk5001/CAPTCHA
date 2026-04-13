@@ -155,6 +155,7 @@
         display: none;
         flex-direction: column;
         align-items: center;
+        justify-content: center;
       }
 
       .header {
@@ -477,6 +478,7 @@
       let p5Instance;
       let lastGeneratedImageUrl = null;
       let shuffleMode = false; // false = most-recent-first, true = random
+      let _initialSyncDone = false; // true after first sync attempt completes (success or fail)
       let userInput = "";
       let displayChannel; // BroadcastChannel for display window
       let questionSubmitted = false; // Flag to prevent multiple submissions 
@@ -572,7 +574,8 @@
           const gen = images.slice(config.imageCount);
           if (gen.length > MAX_GENERATED) images.splice(config.imageCount, gen.length - MAX_GENERATED);
           debug('Synced ' + added + ' from Supabase, total: ' + (images.length - config.imageCount));
-          if (added > 0) initializeGrid();
+          _initialSyncDone = true;
+          initializeGrid(); // always rebuild — replaces grey cells with real data
           return; // success — skip ComfyUI fallback
         } catch (e) {
           debug('Supabase sync failed (' + e.message + '), falling back to ComfyUI history');
@@ -603,9 +606,12 @@
           const gen = images.slice(config.imageCount);
           if (gen.length > MAX_GENERATED) images.splice(config.imageCount, gen.length - MAX_GENERATED);
           debug("ComfyUI fallback synced " + added + " images");
-          if (added > 0) initializeGrid();
+          _initialSyncDone = true;
+          initializeGrid();
         } catch (e) {
           debug("ComfyUI history sync failed: " + e.message);
+          _initialSyncDone = true; // sync failed entirely — unlock placeholders
+          initializeGrid();
         }
       }
 
@@ -631,46 +637,52 @@
         const generatedImgs = [...new Set(images.slice(config.imageCount))];
 
         if (shuffleMode) {
-          // Full random mix from everything
           const pool = generatedImgs.length >= gridSlots
-            ? generatedImgs                          // enough history — no placeholders in shuffle
+            ? generatedImgs
             : [...new Set(images)];
           displayedImages = shuffleArray([...pool]).slice(0, gridSlots);
         } else {
-          // Default: most recent generated faces first, oldest at end
           const recentGenerated = generatedImgs.slice(-gridSlots).reverse();
           if (recentGenerated.length >= gridSlots) {
-            // Enough history — show only generated, no placeholders
             displayedImages = recentGenerated;
-          } else {
+          } else if (recentGenerated.length > 0) {
+            // Mix: recent generated + placeholder fill
             const fillCount = gridSlots - recentGenerated.length;
             const localFill = shuffleArray([...localImgs]).slice(0, fillCount);
             displayedImages = [...recentGenerated, ...localFill];
+          } else if (_initialSyncDone) {
+            // Sync finished but no generated images — fall back to placeholders
+            displayedImages = shuffleArray([...localImgs]).slice(0, gridSlots);
+          } else {
+            // Sync still in flight — show empty grey cells, not clickable
+            displayedImages = new Array(gridSlots).fill(null);
           }
         }
-        
+
         // Create grid items
-        for (let i = 0; i < displayedImages.length; i++) {
+        for (let i = 0; i < gridSlots; i++) {
           const gridItem = document.createElement('div');
           gridItem.className = 'grid-item';
           gridItem.dataset.index = i;
-          
-          const img = document.createElement('img');
-          img.alt = `Image ${i+1}`;
-          img.style.filter = 'grayscale(100%)';
-          img.onload = () => img.classList.add('img-loaded');
-          img.onerror = () => img.classList.add('img-loaded'); // show broken img rather than hiding
-          img.src = displayedImages[i]; // set src last so onload fires correctly
-          
-          gridItem.appendChild(img);
-          gridContainer.appendChild(gridItem);
 
-          // Add click event
-          gridItem.addEventListener('click', handleTileClick);
+          if (displayedImages[i]) {
+            const img = document.createElement('img');
+            img.alt = `Image ${i+1}`;
+            img.style.filter = 'grayscale(100%)';
+            img.onload = () => img.classList.add('img-loaded');
+            img.onerror = () => img.classList.add('img-loaded');
+            img.src = displayedImages[i];
+            gridItem.appendChild(img);
+            gridItem.addEventListener('click', handleTileClick);
+          } else {
+            gridItem.style.cursor = 'default'; // empty cell while loading
+          }
+
+          gridContainer.appendChild(gridItem);
         }
 
-        // Prefetch all 9 displayed images into browser cache while grid is hidden
-        displayedImages.forEach(url => { const p = new Image(); p.src = url; });
+        // Prefetch real images into browser cache
+        displayedImages.forEach(url => { if (url) { const p = new Image(); p.src = url; } });
 
         debug("Grid initialized with images");
       }
@@ -1539,6 +1551,7 @@
         // Fall back to local images immediately if sync fails or ComfyUI is offline.
         initializeGrid(); // show local images immediately while sync runs
         syncHistoryFromComfyUI(); // re-renders grid when history arrives
+        setInterval(syncHistoryFromComfyUI, 30000); // re-sync every 30s so all devices stay current
         // Ensure switch camera button is available even if webcam init fails
         try { addCameraSwitchButton(); } catch(e) { debug('addCameraSwitchButton error: ' + e.message); }
         initWebcam();
