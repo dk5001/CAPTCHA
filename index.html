@@ -181,6 +181,7 @@
         grid-template-columns: repeat(3, 1fr);
         gap: clamp(4px, 1.5vw, 10px);
         width: min(630px, 96vw);
+        margin-bottom: 20vh; /* biases centering toward upper half; doesn't affect absolute buttons */
       }
 
       .grid-item {
@@ -267,6 +268,18 @@
         padding: 20px 16px;
         box-sizing: border-box;
         z-index: 100;
+      }
+
+      /* Spacers that center content and bias it upward (2:1 below:above).
+         They collapse to 0 when content overflows so scroll is never blocked. */
+      #receipt-interface::before {
+        content: '';
+        flex: 1;
+      }
+
+      #receipt-interface::after {
+        content: '';
+        flex: 2;
       }
 
       .receipt-header {
@@ -1551,7 +1564,7 @@
         // Fall back to local images immediately if sync fails or ComfyUI is offline.
         initializeGrid(); // show local images immediately while sync runs
         syncHistoryFromComfyUI(); // re-renders grid when history arrives
-        setInterval(syncHistoryFromComfyUI, 30000); // re-sync every 30s so all devices stay current
+        setInterval(syncHistoryFromComfyUI, 60000); // re-sync every 60s so all devices stay current
         // Ensure switch camera button is available even if webcam init fails
         try { addCameraSwitchButton(); } catch(e) { debug('addCameraSwitchButton error: ' + e.message); }
         initWebcam();
