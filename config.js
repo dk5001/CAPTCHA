@@ -8,7 +8,7 @@
 // Both tunnels give you an https://*.trycloudflare.com URL — paste them here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-let COMFY_URL = "https://remark-calculation-choice-alleged.trycloudflare.com";
+let COMFY_URL = "https://one-neighborhood-playstation-maiden.trycloudflare.com";
 let PROMPT_SERVER_URL = null; // disabled — Ollama prompt enhancer not in use
 
 const SUPABASE_URL = "https://tqbujuswtscrjglxpryn.supabase.co";
