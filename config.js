@@ -8,7 +8,7 @@
 // Both tunnels give you an https://*.trycloudflare.com URL — paste them here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-let COMFY_URL = "https://pursuit-fields-purchase-grounds.trycloudflare.com";
+let COMFY_URL = "https://uri-mens-digit-greatly.trycloudflare.com";
 let PROMPT_SERVER_URL = null; // disabled — Ollama prompt enhancer not in use
 
 const SUPABASE_URL = "https://tqbujuswtscrjglxpryn.supabase.co";
