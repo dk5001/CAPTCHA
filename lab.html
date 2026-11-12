@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Face engine lab</title>
+<script src="config.js"></script>
+<style>
+  body { margin: 0; padding: 20px; background: #0a0a0a; color: #f5f5f0; font: 14px/1.4 -apple-system, Helvetica, Arial, sans-serif; }
+  h1 { font-size: 18px; margin: 28px 0 4px; }
+  h1:first-child { margin-top: 0; }
+  p { color: #969696; margin: 0 0 16px; max-width: 75ch; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
+  input[type=range] { width: 260px; }
+  .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; max-width: 1100px; }
+  figure { margin: 0; }
+  figure canvas, figure img { width: 100%; display: block; }
+  figcaption { color: #969696; font-size: 12px; padding: 4px 0 8px; }
+  #status, #archiveStatus { color: #969696; }
+  .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 360px)); gap: 8px; }
+</style>
+</head>
+<body>
+<h1>Face engine lab</h1>
+<p>Test page for the V2 blend. Each row is: you, the chosen face, the plain blend, and the blend pushed away from the collective face. The last two rows use a chosen face that is small, off to one side and tilted, or taken from a crowded archive picture, to check that the blend does not squash.</p>
+<div class="controls">
+  <label for="strength">Strength</label>
+  <input id="strength" type="range" min="1" max="5" step="0.25" value="3">
+  <output id="strengthOut">300%</output>
+  <span id="status">Loading models…</span>
+</div>
+<div id="rows"></div>
+
+<h1>Collective face</h1>
+<p>Left: the average of the nine seed faces. Right: the average of faces found in the live archive, built up one picture at a time. Pictures with no usable face are skipped.</p>
+<div class="pair">
+  <figure id="seedCollective"><figcaption>seed faces</figcaption></figure>
+  <figure id="archiveCollective"><figcaption id="archiveStatus">archive: waiting…</figcaption></figure>
+</div>
+
+<h1>Morphing collective face</h1>
+<p>Instead of one averaged face: a continuous morph through individual archive faces, two at a time, so it stays sharp. The strip shows five steps between two faces.</p>
+<div class="pair">
+  <figure><canvas id="morph" width="512" height="512"></canvas><figcaption id="morphStatus">waiting for archive faces…</figcaption></figure>
+</div>
+<div class="row" id="strip" style="grid-template-columns: repeat(5, minmax(0, 1fr)); margin-top: 8px;"></div>
+
+<script type="module">
+import { createFaceEngine, DEFAULT_STRENGTH } from './src/face-engine.js';
+
+const params = new URLSearchParams(location.search);
+const ARCHIVE_LIMIT = Number(params.get('n') || 60); // ?n=250 for the whole archive
+const status = document.getElementById('status');
+const slider = document.getElementById('strength');
+const sliderOut = document.getElementById('strengthOut');
+slider.value = DEFAULT_STRENGTH;
+const PAIRS = [['img02', 'img04'], ['img07', 'img03'], ['img06', 'img08']];
+const SEEDS = Array.from({ length: 9 }, (_, i) => `img0${i + 1}`);
+
+const loadImage = (src) => new Promise((ok, fail) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = () => fail(new Error('could not load ' + src)); im.src = src; });
+const copy = (c) => { const o = document.createElement('canvas'); o.width = c.width; o.height = c.height; o.getContext('2d').drawImage(c, 0, 0); return o; };
+const figure = (node, text) => { const f = document.createElement('figure'); f.append(node); const c = document.createElement('figcaption'); c.textContent = text; f.append(c); return f; };
+
+/** A copy of an image with the face made small, moved off-centre and tilted. */
+function displaced(img) {
+  const c = document.createElement('canvas'); c.width = 900; c.height = 700;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#777'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.translate(640, 250); ctx.rotate(0.3); ctx.scale(0.55, 0.55);
+  ctx.drawImage(img, -img.width / 2, -img.height / 2);
+  return c;
+}
+
+async function archiveRows(limit) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/generations?select=generated_url,created_at&order=created_at.desc&limit=${limit}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY },
+  });
+  if (!res.ok) throw new Error('archive request failed: ' + res.status);
+  return res.json();
+}
+
+try {
+  const t0 = performance.now();
+  const engine = await createFaceEngine();
+  const faces = {};
+  for (const name of SEEDS) {
+    const face = engine.analyze(await loadImage(`images/${name}.png`));
+    if (face) faces[name] = face; else console.warn('no face found in', name);
+  }
+  const tLoaded = performance.now();
+  const all = Object.values(faces);
+  const template = engine.templateFrom(all);
+  const seedCollective = engine.createCollective(template);
+  all.forEach((f) => seedCollective.add(f));
+  document.getElementById('seedCollective').prepend(seedCollective.render());
+  const meanShape = seedCollective.shape();
+
+  const rows = document.getElementById('rows');
+  const slots = [];
+  const addRow = (host, guest, hostLabel, guestLabel, guestPreview) => {
+    const row = document.createElement('div'); row.className = 'row';
+    const plain = engine.blend(host, guest, meanShape, { strength: 1 }).canvas;
+    const pushed = document.createElement('div');
+    const cap = figure(pushed, '');
+    row.append(figure(copy(host.canvas), hostLabel), figure(guestPreview || copy(guest.canvas), guestLabel), figure(plain, 'blend 100%'), cap);
+    rows.append(row);
+    slots.push({ host, guest, pushed, cap: cap.querySelector('figcaption') });
+  };
+  for (const [h, g] of PAIRS) addRow(faces[h], faces[g], `you (${h})`, `chosen (${g})`);
+
+  // Offset test: the same chosen face, but small, off to one side and tilted in its picture.
+  const off = displaced(await loadImage('images/img04.png'));
+  const offFace = engine.analyze(off);
+  if (offFace) addRow(faces.img02, offFace, 'you (img02)', 'chosen (img04, small + off-centre + tilted)', off);
+
+  let blendMs = 0;
+  const render = () => {
+    const strength = Number(slider.value);
+    sliderOut.textContent = `${Math.round(strength * 100)}%`;
+    const t = performance.now();
+    for (const s of slots) {
+      s.pushed.replaceChildren(engine.blend(s.host, s.guest, meanShape, { strength }).canvas);
+      s.cap.textContent = `blend ${Math.round(strength * 100)}%`;
+    }
+    blendMs = (performance.now() - t) / slots.length;
+    status.textContent = `${all.length} seed faces · models + analysis ${Math.round(tLoaded - t0)} ms · ${Math.round(blendMs)} ms per blend`;
+  };
+  slider.addEventListener('input', render);
+  render();
+
+  // Collective face from the live archive, one picture at a time.
+  const archiveStatus = document.getElementById('archiveStatus');
+  const holder = document.getElementById('archiveCollective');
+  const archive = engine.createCollective(template);
+  const flats = [];
+  const player = engine.createMorphPlayer(document.getElementById('morph'), template);
+  if (!params.has('still')) player.play(flats);
+  let used = 0, skipped = 0, firstArchiveFace = null, firstArchiveImg = null;
+  try {
+    const list = await archiveRows(ARCHIVE_LIMIT);
+    for (const [i, row] of list.entries()) {
+      try {
+        const img = await loadImage(row.generated_url);
+        const face = engine.analyze(img);
+        if (face) { archive.add(face); flats.push(engine.flatten(face, template)); used++; document.getElementById('morphStatus').textContent = `morphing through ${flats.length} archive faces`; if (!firstArchiveFace) { firstArchiveFace = face; firstArchiveImg = img; } } else skipped++;
+      } catch (e) { skipped++; }
+      if (i % 5 === 4 || i === list.length - 1) {
+        if (used) { holder.querySelector('canvas')?.remove(); holder.prepend(archive.render()); }
+        archiveStatus.textContent = `archive: ${used} faces used, ${skipped} pictures skipped, ${i + 1} of ${list.length} read`;
+        await new Promise((r) => setTimeout(r));
+      }
+    }
+    if (flats.length > 1) {
+      for (const k of [0, 0.25, 0.5, 0.75, 1]) { player.draw(flats[0], flats[1], k); document.getElementById('strip').append(figure(copy(document.getElementById('morph')), `${k * 100}%`)); }
+    }
+    if (firstArchiveFace) { addRow(faces.img02, firstArchiveFace, 'you (img02)', 'chosen (newest archive picture with a face)', firstArchiveImg); render(); }
+  } catch (e) {
+    archiveStatus.textContent = 'archive: ' + e.message;
+  }
+  window.__lab = { ok: true, faces: all.length, blendMs, archiveUsed: used, archiveSkipped: skipped };
+} catch (err) {
+  console.error(err);
+  status.textContent = 'Error: ' + err.message;
+  window.__lab = { ok: false, error: String(err && err.stack || err) };
+}
+</script>
+</body>
+</html>

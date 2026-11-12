@@ -1,10 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.10.0/p5.js"></script>
-    <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
     <script src="config.js"></script>
-    <script src="p5.comfyui-helper.js"></script>
+    <script type="module" src="src/app.js"></script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>CAPTCHA 2.0</title>
@@ -41,9 +39,26 @@
         width: 100%;
         height: 100%;
         display: flex;
+        flex-direction: column;
+        gap: 24px;
         justify-content: center;
         align-items: center;
         z-index: 10;
+      }
+
+      #privacy-note {
+        margin: 0;
+        max-width: min(480px, 90vw);
+        text-align: center;
+        color: #8a8a8a;
+        font-size: clamp(12px, 3vw, 15px);
+      }
+
+      #collective-face {
+        width: min(340px, 62vw, 42vh);
+        height: auto;
+        aspect-ratio: 1;
+        background: #000;
       }
 
       .checkbox-container {
@@ -161,7 +176,7 @@
       .header {
         width: 100%;
         min-height: 80px;
-        background-color: #646464;
+        background-color: transparent;
         display: flex;
         justify-content: center;
         align-items: center;
@@ -186,12 +201,33 @@
 
       .grid-item {
         aspect-ratio: 1;
-        border: 3px solid white;
         cursor: pointer;
         position: relative;
         overflow: hidden;
-        background-color: #1a1a1a; /* placeholder while image loads */
+        background-color: #000;
+        transition: transform 0.4s ease, opacity 0.4s ease;
       }
+
+      /* Faces float on black: no frames. Choosing one dims the rest. */
+      .grid-container:has(.selected) .grid-item:not(.selected) { opacity: 0.25; }
+      .grid-item.selected { transform: scale(1.08); z-index: 1; }
+
+      /* The live camera and the captured photo get the same soft oval, so no background shows. */
+      .grid-item video,
+      .grid-item.selected img {
+        -webkit-mask-image: radial-gradient(ellipse 40% 48% at 50% 47%, #000 62%, transparent 100%);
+        mask-image: radial-gradient(ellipse 40% 48% at 50% 47%, #000 62%, transparent 100%);
+      }
+
+      #reveal-holder { width: min(560px, 88vw, 62vh); aspect-ratio: 1; flex: none; }
+      #reveal-face { width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 1.4s ease; }
+      #reveal-face.shown { opacity: 1; }
+      #reveal-status { min-height: 1.4em; color: #969696; font-size: clamp(13px, 3vw, 16px); }
+      #reveal-footer { opacity: 0; transition: opacity 1.5s ease; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: clamp(15px, 3.6vw, 20px); }
+      #reveal-footer.visible { opacity: 1; }
+      .reveal-small { color: #969696; font-size: clamp(11px, 2.6vw, 14px); }
+      a.reveal-small { text-decoration: underline; }
+      .reveal-spacer { flex: 1; }
 
       .grid-item img {
         width: 100%;
@@ -212,7 +248,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(100, 0, 0, 0.4);
+        background-color: transparent;
       }
 
       .shuffle-button {
@@ -261,7 +297,9 @@
         position: fixed;
         inset: 0;
         overflow-y: auto;
-        background-color: white;
+        background-color: #000;
+        color: #f5f5f0;
+        text-align: center;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -435,6 +473,7 @@
     <div id="interface-container">
       <!-- Checkbox Interface -->
       <div id="checkbox-interface">
+        <canvas id="collective-face" width="512" height="512" aria-label="The collective face, morphing through everyone in the archive"></canvas>
         <div class="checkbox-container">
           <div class="checkbox-wrapper">
             <div class="checkbox" id="rational-checkbox"></div>
@@ -442,6 +481,7 @@
           </div>
           <img src="cog.png" class="cog-icon" alt="Cog icon">
         </div>
+        <p id="privacy-note">Your photo never leaves this device. We keep what you became.</p>
       </div>
 
       <!-- Question Interface -->
@@ -488,7 +528,6 @@
       let displayedImages = [];
       let video;
       let capturedImage = null;
-      let p5Instance;
       let lastGeneratedImageUrl = null;
       let shuffleMode = false; // false = most-recent-first, true = random
       let _initialSyncDone = false; // true after first sync attempt completes (success or fail)
@@ -649,7 +688,12 @@
         const localImgs = images.slice(0, config.imageCount);
         const generatedImgs = [...new Set(images.slice(config.imageCount))];
 
-        if (shuffleMode) {
+        // V2: each square is a new combination of two stored faces. Until enough stored faces
+        // have loaded, fall through to the older behaviour below.
+        const combos = window.EP && window.EP.makeCombos ? window.EP.makeCombos(gridSlots) : null;
+        if (combos) {
+          displayedImages = combos;
+        } else if (shuffleMode) {
           const pool = generatedImgs.length >= gridSlots
             ? generatedImgs
             : [...new Set(images)];
@@ -1116,13 +1160,18 @@
             window.capturedImage = capturedImage;
             window.selectedImageSrc = displayedImages[selectedTile.dataset.index];
             
-            // Here you would proceed to the next state - show question interface
+            // V2: no question step. Go straight from the capture to the blend.
+            // Dip to black: the grid fades out, the screen rests on black, then the face fades up.
             setTimeout(() => {
-              debug("Transitioning to question interface");
-              document.getElementById('grid-interface').style.display = 'none';
-              document.getElementById('question-interface').style.display = 'flex';
-              // Focus on the input field
-              document.getElementById('user-input').focus();
+              const grid = document.getElementById('grid-interface');
+              grid.style.transition = 'opacity 0.9s ease';
+              grid.style.opacity = '0';
+              setTimeout(() => {
+                grid.style.display = 'none';
+                grid.style.transition = '';
+                grid.style.opacity = '';
+                createReceiptInterface(window.capturedImage, window.selectedImageSrc);
+              }, 1300);
             }, 1000);
           };
           
@@ -1144,12 +1193,11 @@
             let animationFrame;
             let dotCount = 0;
             let statusMessages = [
-              'Analyzing facial features',
-              'Extracting key points',
-              'Generating latent space',
-              'Blending face attributes',
-              'Applying style transfer',
-              'Rendering final image'
+              'Finding your face',
+              'Matching 478 points',
+              'Aligning the two faces',
+              'Blending',
+              'Comparing with the collective face'
             ];
             let currentMsgIndex = 0;
             
@@ -1192,7 +1240,7 @@
             window.pulseAnimationFrame = animationFrame;
           }
 
-      // Create receipt interface and p5 instance
+      // Create receipt interface and start the blend
       function createReceiptInterface(capturedImage, selectedImageSrc) {
         debug("Creating receipt interface");
         
@@ -1204,199 +1252,53 @@
         const receiptContainer = document.createElement('div');
         receiptContainer.id = 'receipt-interface';
 
+        // V2: one face on black. It starts as the visitor and slowly becomes the blended face.
         receiptContainer.innerHTML = `
-          <h2 style="margin-bottom: 12px; font-size: clamp(18px,5vw,26px);">Processing Your Images</h2>
-          <p style="margin-bottom: 16px; font-size: clamp(13px,3vw,16px);">Please wait while we generate your results...</p>
-          <div class="loading-images">
-            <div class="loading-img-block">
-              <h3>Selected Face</h3>
-              <div class="loading-thumb" style="position:relative;">
-                <img src="${selectedImageSrc}">
-                <div id="selected-img-glow" style="position:absolute;top:0;left:0;width:100%;height:100%;background-color:rgba(255,0,0,0);z-index:2;pointer-events:none;"></div>
-              </div>
-            </div>
-            <div class="loading-img-block">
-              <h3>Your Face</h3>
-              <div class="loading-thumb" style="position:relative;">
-                <img src="${capturedImage.src}">
-                <div id="captured-img-glow" style="position:absolute;top:0;left:0;width:100%;height:100%;background-color:rgba(255,0,0,0);z-index:2;pointer-events:none;"></div>
-              </div>
-            </div>
-            <div class="loading-img-block">
-              <h3>Generated Image</h3>
-              <div class="loading-thumb-placeholder">Generating...</div>
-            </div>
-          </div>
-          <div id="generation-status" style="margin-top:20px;font-style:italic;font-size:clamp(13px,3vw,16px);">Initializing generation...</div>
+          <div class="reveal-spacer"></div>
+          <div id="reveal-holder"></div>
+          <div id="reveal-status"></div>
+          <div id="reveal-footer"></div>
+          <div class="reveal-spacer"></div>
         `;
-        
         document.getElementById('interface-container').appendChild(receiptContainer);
-        
-        // Create a hidden canvas for p5 to use
-        const p5Container = document.createElement('div');
-        p5Container.id = 'p5-container';
-        p5Container.style.display = 'none';
-        document.body.appendChild(p5Container);
 
-        // Start the pulsing animation
-        startPulseAnimation();
-        
-        // Create p5 instance with a sketch function that bridges to sketch.js
-        p5Instance = new p5(function(p) {
-          // Store references to captured and selected images
-          let p5CapturedImage;
-          let p5SelectedImage;
-          let workflow;
-          let comfy;
-          let srcImg;
-          let resImg;
-          let jsonFilename;
-          
-          p.preload = function() {
-            // Load ComfyUI workflow
-            workflow = p.loadJSON("latent_face_morph_workflow_controlNet_API.json");
-          };
-          
-          p.setup = function() {
-            p.createCanvas(512, 512);
-            p.canvas.style.display = 'none';
+        // V2: blend in the browser with the face engine (src/face-engine.js). No ComfyUI.
+        runV2Blend(capturedImage, selectedImageSrc);
+      }
 
-            // Initialize ComfyUI helper
-            comfy = new ComfyUiP5Helper(COMFY_URL);
-
-            // 512×512 — smaller canvas = faster VAE encode/decode in ComfyUI
-            srcImg = p.createGraphics(512, 512);
-            
-            // Load the selected image
-            p5SelectedImage = p.loadImage(selectedImageSrc, () => {
-              debug("Selected image loaded in p5");
-              
-              // Create a p5 image from the capture
-              p.loadImage(capturedImage.src, (loadedCaptureImg) => {
-                p5CapturedImage = loadedCaptureImg;
-                debug("Captured image loaded in p5");
-                
-                // Generate a unique filename
-                jsonFilename = 'subject_' + Math.floor(100000 + Math.random() * 900000);
-                
-                // Start the image generation process
-                requestImage();
-              });
-            });
-          };
-          
-          async function requestImage() {
-            debug("Requesting ComfyUI image generation");
-            
-            if (!p5CapturedImage) {
-              debug("No captured image available");
-              showErrorInReceipt();
-              return;
-            }
-            
-            // Prepare source image for generation at 512×512
-            srcImg.image(p5CapturedImage, 0, 0, 512, 512);
-            
-            // Replace the LoadImage node with our source image
-            workflow[1] = comfy.image(srcImg);
-            workflow[2] = comfy.image(p5SelectedImage);
-            workflow[6].inputs.seed = Math.floor(Math.random() * 1e15);
-            
-            // Set the text prompt with user input
-            let promptText = "person, black and white image";
-            
-            if (userInput && PROMPT_SERVER_URL) {
-              try {
-                debug("Calling prompt server with: " + userInput);
-                const response = await fetch(PROMPT_SERVER_URL, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ text: userInput })
-                });
-
-                if (response.ok) {
-                  const data = await response.json();
-                  if (data.prompt) {
-                    promptText = data.prompt + ", black and white image";
-                    debug("Received enhanced prompt: " + promptText);
-                  } else {
-                    promptText = `${userInput} in a form of a human, black and white image`;
-                  }
-                } else {
-                  debug("Prompt server returned status: " + response.status);
-                  promptText = `${userInput} in a form of a human, black and white image`;
-                }
-              } catch (e) {
-                debug("Error calling prompt server: " + e.message);
-                promptText = `${userInput} in a form of a human, black and white image`;
-              }
-            } else if (userInput) {
-              promptText = `${userInput} in a form of a human, black and white image`;
-            }
-            
-            debug(`Setting prompt text to: "${promptText}"`);
-            workflow[10].inputs.text = promptText;
-            
-            debug("Generated random seed: " + workflow[6].inputs.seed);
-
-             // Add timeout to handle stuck requests
-            let requestTimeout = setTimeout(() => {
-              debug("ComfyUI request timed out after 120 seconds");
-              showErrorInReceipt();
-            }, 90000); // 1 min 30 sec timeout
-            
-            debug("Running ComfyUI workflow");
-            comfy.run(workflow, (results, err) => {
-              // Clear the timeout since we got a response
-              clearTimeout(requestTimeout);
-              gotImage(results, err);
-            });
-          }
-          
-          function gotImage(results, err) {
-            debug("Got image results from ComfyUI");
-  
-            if (err) {
-              debug("Error in ComfyUI generation: " + err);
-              showErrorInReceipt();
-              return;
-            }
-            
-            if (!results) {
-              debug("No results from ComfyUI");
-              showErrorInReceipt();
-              return;
-            }
-            
-            if (results.length === 0) {
-              debug("Empty results from ComfyUI");
-              showErrorInReceipt();
-              return;
-            }
-            
-            if (!results[0] || !results[0].src) {
-              debug("Invalid result format from ComfyUI");
-              showErrorInReceipt();
-              return;
-            }
-            
-            debug("Successfully received generated image URL: " + results[0].src);
-            // Show receipt immediately — browser loads image naturally via <img> tag
-            updateReceiptWithResults(capturedImage, selectedImageSrc, results[0].src, jsonFilename);
-          }
-
-          function showErrorInReceipt() {
-            debug("Showing error in receipt interface");
-
-            // Update the receipt to show an error message
-            updateReceiptWithResults(capturedImage, selectedImageSrc, null, jsonFilename);
-          }
-          
-        }, 'p5-container');
+      // Blend the visitor's photo with the chosen face, then show the receipt.
+      async function runV2Blend(capturedImage, selectedImageSrc) {
+        const sessionId = 'subject_' + Math.floor(100000 + Math.random() * 900000);
+        const statusEl = document.getElementById('reveal-status');
+        const footer = document.getElementById('reveal-footer');
+        const showFooter = (html) => {
+          footer.innerHTML = html + '<button id="reset-button" class="receipt-reset-btn">Start Over</button>';
+          footer.classList.add('visible');
+          document.getElementById('reset-button').addEventListener('click', resetApp);
+        };
+        try {
+          const result = await window.EP.blend(capturedImage, selectedImageSrc);
+          statusEl.textContent = '';
+          // Bookkeeping and saving happen while the face is morphing. Only the artifact
+          // (a face in an oval, a third the visitor's) is saved or reused.
+          updateReceiptWithResults(capturedImage, selectedImageSrc, result.artifactUrl, sessionId);
+          window.EP.saveTile(sessionId, result).catch(e => debug('Tile save failed: ' + e.message));
+          await window.EP.reveal(document.getElementById('reveal-holder'), result);
+          showFooter(`
+            <p>You are now part of the collective face.</p>
+            <p class="reveal-small">Your photo never left this device. Only this face is kept, and a third of it is yours.</p>
+            <p class="reveal-small">No. ${sessionId.replace('subject_', '')} · ${new Date().toLocaleDateString()}</p>
+            <a class="reveal-small" href="archive.html">See the archive wall</a>
+          `);
+        } catch (e) {
+          debug('V2 blend failed: ' + e.message);
+          statusEl.textContent = e.code === 'NO_FACE' ? 'No face found. Please try again.' : 'Something went wrong. Please try again.';
+          showFooter('');
+        }
       }
 
       // Update receipt with results
-      function updateReceiptWithResults(capturedImage, selectedImageSrc, generatedImageSrc, jsonFilename) {
+      function updateReceiptWithResults(capturedImage, selectedImageSrc, generatedImageSrc, jsonFilename, fullPictureSrc) {
         debug("Updating receipt with results");
 
         // Stop the pulse animation if it's running
@@ -1433,6 +1335,9 @@
           saveToSupabase(generatedImageSrc, userInput, jsonFilename);
         }
         
+        // V2 draws its own result screen (see runV2Blend); the rest of this function is V1's receipt.
+        if (window.EP) return;
+
         const receiptContainer = document.getElementById('receipt-interface');
         if (!receiptContainer) return;
         
@@ -1442,7 +1347,7 @@
         // Set up receipt content
         const userId = jsonFilename ? jsonFilename.replace('subject_', '') : Math.floor(100000 + Math.random() * 900000);
         receiptContainer.innerHTML = `
-          <h1 class="receipt-header">GENERATION RESULTS</h1>
+          <h1 class="receipt-header">YOUR CONTRIBUTION</h1>
 
           <div class="receipt-meta">
             <div>
@@ -1458,7 +1363,7 @@
 
           <div class="receipt-images">
             <div class="receipt-image-block">
-              <h3>Selected Image</h3>
+              <h3>The Face You Chose</h3>
               <img src="${selectedImageSrc}" class="receipt-img" onload="this.classList.add('img-loaded')" onerror="this.classList.add('img-loaded')">
             </div>
             <div class="receipt-image-block">
@@ -1466,15 +1371,16 @@
               <img src="${capturedImage.src}" class="receipt-img" onload="this.classList.add('img-loaded')" onerror="this.classList.add('img-loaded')">
             </div>
             <div class="receipt-image-block">
-              <h3>Generated Image</h3>
+              <h3>What You Became</h3>
               ${generatedImageSrc
-                ? `<img src="${generatedImageSrc}" class="receipt-img" onload="this.classList.add('img-loaded')" onerror="this.classList.add('img-loaded')">`
-                : `<div class="receipt-img-placeholder">Generation failed</div>`}
+                ? `<img src="${fullPictureSrc || generatedImageSrc}" class="receipt-img" onload="this.classList.add('img-loaded')" onerror="this.classList.add('img-loaded')">`
+                : `<div class="receipt-img-placeholder">${window.blendFailureText || 'Generation failed'}</div>`}
             </div>
           </div>
 
           <div class="receipt-footer">
             <p>Thank you for contributing to our collective face</p>
+            <p style="font-size: clamp(11px,2.6vw,14px); color:#666;">Your photo never left this device. Only the face inside the oval is kept, and a third of it is yours.</p>
             <p>This project is constantly evolving to reflect our unconsciousness and biases</p>
             <div style="margin: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px;">
               <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(window.location.origin + '/archive.html')}" style="width:100px;height:100px;border:2px solid #ccc;" alt="QR code">
@@ -1494,17 +1400,6 @@
       function resetApp() {
         debug("Resetting application");
         
-        // Remove p5 instance
-        if (p5Instance) {
-          p5Instance.remove();
-          p5Instance = null;
-        }
-        
-        // Remove p5 container
-        const p5Container = document.getElementById('p5-container');
-        if (p5Container) {
-          p5Container.remove();
-        }
         
         // Hide receipt interface
         const receiptInterface = document.getElementById('receipt-interface');
@@ -1683,6 +1578,7 @@
       
       // Start the application when DOM is loaded
       document.addEventListener('DOMContentLoaded', init);
+      window.addEventListener('ep-faces-ready', () => { if (!selectedTile && !document.getElementById('receipt-interface')) initializeGrid(); });
     </script>
   </body>
 </html>
