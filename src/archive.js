@@ -67,14 +67,18 @@ export function createArchive({ url, key, bucket = 'faces' }) {
     tile.crossOrigin = 'anonymous';
     tile.src = publicUrl(`tiles/img/${sessionId}.jpg`);
     await tile.decode();
-    return { sessionId, tile, shape: Float32Array.from(meta.points, (v) => v / 10), parents: meta.parents || [] };
+    return { sessionId, tile, shape: Float32Array.from(meta.points, (v) => v / 10), parents: meta.parents || [], mix: meta.mix, settings: meta.settings || null };
   }
 
-  /** Save a flattened face (from engine.flatten) so the morph can use it later. */
-  async function saveTile(sessionId, flat, parents = []) {
+  /**
+   * Save a flattened face (from engine.flatten) so the morph can use it later. `extra` is kept
+   * with it: `mix` (how the two parents were combined into the chosen face) and `settings`
+   * (the blend settings it was made with), so the face page can replay it exactly.
+   */
+  async function saveTile(sessionId, flat, parents = [], extra = {}) {
     await upload(`tiles/img/${sessionId}.jpg`, await toBlob(flat.tile, 'image/jpeg', TILE_QUALITY), 'image/jpeg');
     const points = Array.from(flat.shape, (v) => Math.round(v * 10)); // tenths of a pixel
-    await upload(`tiles/pts/${sessionId}.json`, JSON.stringify({ v: 2, size: flat.tile.width, points, parents }), 'application/json');
+    await upload(`tiles/pts/${sessionId}.json`, JSON.stringify({ v: 2, size: flat.tile.width, points, parents, ...extra }), 'application/json');
     const res = await fetch(`${url}/rest/v1/face_index`, {
       method: 'POST', headers: { ...auth, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ session_id: sessionId, parents }),

@@ -70,9 +70,10 @@ function makeCombos(count) {
   for (let n = 0; n < count; n++) {
     const a = flats[Math.floor(Math.random() * flats.length)];
     let b; do { b = flats[Math.floor(Math.random() * flats.length)]; } while (b === a);
-    const face = engine.comboFace(a, b, 0.35 + Math.random() * 0.3, FACE_TEMPLATE);
+    const k = 0.35 + Math.random() * 0.3;
+    const face = engine.comboFace(a, b, k, FACE_TEMPLATE);
     const url = face.canvas.toDataURL('image/jpeg', 0.9);
-    combos.set(url, { face, parents: [a.sessionId, b.sessionId].filter(Boolean) });
+    combos.set(url, { face, parents: [a.sessionId, b.sessionId].filter(Boolean), mix: k });
     urls.push(url);
   }
   return urls;
@@ -98,13 +99,13 @@ async function blend(capturedImage, selectedSrc) {
     // The chosen picture has no usable face: fall back to a seed face.
     guest = engine.analyze(await loadImage(SEED_FACES[Math.floor(Math.random() * SEED_FACES.length)]));
   }
-  last = { host, guest, hostFlat: engine.flatten(host, FACE_TEMPLATE), parents: combo ? combo.parents : [] };
+  last = { host, guest, hostFlat: engine.flatten(host, FACE_TEMPLATE), parents: combo ? combo.parents : [], mix: combo ? combo.mix : undefined };
   return mixLast();
 }
 
 /** Blend the last visitor with the last chosen face, using the current settings. */
 function mixLast() {
-  const { host, guest, hostFlat, parents } = last;
+  const { host, guest, hostFlat, parents, mix } = last;
   const out = engine.blend(host, guest, collectiveShape(), settings);
   const flat = engine.ovalTile(engine.flatten({ canvas: out.canvas, p3: out.p3 }, FACE_TEMPLATE), FACE_TEMPLATE);
   return {
@@ -113,6 +114,8 @@ function mixLast() {
     artifactUrl: flat.tile.toDataURL('image/png'),
     flat,
     parents,
+    mix,                       // how the two parents were combined into the chosen face
+    settings: { ...settings }, // the blend settings this face was made with
   };
 }
 
@@ -179,7 +182,7 @@ function reveal(container, result, { seconds = MORPH_SECONDS, hold = 1.4, rest =
 /** Save the artifact's tile to the archive and add it to the morph straight away. */
 async function saveTile(sessionId, result) {
   flats.push({ sessionId, ...result.flat });
-  await archive.saveTile(sessionId, result.flat, result.parents);
+  await archive.saveTile(sessionId, result.flat, result.parents, { mix: result.mix, settings: result.settings });
 }
 
 /** Start the morphing collective face on a canvas, fed from the archive. */

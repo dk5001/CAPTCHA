@@ -57,8 +57,8 @@
   <p id="message">Thank you for contributing to EVOLVING PORTRAIT</p>
   <p class="small" id="detail"></p>
   <nav>
-    <a href="https://fl4me.mov/work/evolving-portrait/">About the project and the artist</a>
-    <a href="archive.html">See the archive wall</a>
+    <a href="https://fl4me.mov/work/evolving-portrait/" target="_blank" rel="noopener">About the project and the artist</a>
+    <a href="archive.html" target="_blank" rel="noopener">See the archive wall</a>
   </nav>
 
 <script>
@@ -94,14 +94,15 @@
 </script>
 
 <script type="module">
-// The face morphs: it turns into each of the stored faces it was made from, and back to itself.
+// The face morphs between two faces only: the contributed face (what the visitor became) and the
+// face they chose. The chosen face is rebuilt from the two stored faces it combined, in the same
+// proportion, and the morph runs at the speed that was set when the face was made.
 // Tap the face to pause; it settles back on the contributed face and stays there.
 import { createMorphPlayer } from './src/face-engine.js';
 import { createArchive } from './src/archive.js';
 import { FACE_TEMPLATE } from './src/face-template.js';
-import { HIDDEN_TILES } from './src/hidden-tiles.js';
 
-const TURN_SECONDS = 3.8;   // one turn from face to face, the same as everywhere else on the site
+const TURN_SECONDS = 3.8;   // one turn from face to face at normal speed, as everywhere else on the site
 const REST_SECONDS = 1.6;   // how long it rests on each face
 const id = new URLSearchParams(location.search).get('id') || '';
 const stage = document.getElementById('stage');
@@ -117,16 +118,23 @@ async function start() {
     try { mine = await archive.loadFlat(id); } catch (e) { await new Promise((r) => setTimeout(r, 1500)); }
   }
   if (!mine) return; // the still picture stays
-  // The faces it was made from; if none can be loaded, a few faces from the archive.
-  const others = [];
-  const add = async (other) => {
-    if (other === id || HIDDEN_TILES.has(other) || others.some((f) => f.sessionId === other)) return;
-    try { others.push(await archive.loadFlat(other)); } catch (e) { /* skip it */ }
-  };
-  for (const parent of mine.parents) await add(parent);
-  const fromParents = others.length > 0;
-  if (!fromParents) { try { for (const other of await archive.randomFaces(4)) if (others.length < 2) await add(other); } catch (e) { /* offline */ } }
-  if (!others.length) return;
+  // Rebuild the chosen face. Stored faces all sit on the same template, so combining two of
+  // them is a plain cross-fade of the pictures and a mix of the shapes.
+  const parents = [];
+  for (const parent of mine.parents.slice(0, 2)) { try { parents.push(await archive.loadFlat(parent)); } catch (e) { /* skip it */ } }
+  if (!parents.length) return; // nothing to morph with: the still picture stays
+  let chosen = parents[0];
+  if (parents.length === 2) {
+    const k = typeof mine.mix === 'number' ? mine.mix : 0.5;
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = 512;
+    const ctx = tile.getContext('2d');
+    ctx.drawImage(parents[0].tile, 0, 0, 512, 512);
+    ctx.globalAlpha = k; ctx.drawImage(parents[1].tile, 0, 0, 512, 512);
+    chosen = { tile, shape: parents[0].shape.map((v, i) => v + (parents[1].shape[i] - v) * k) };
+  }
+  const others = [chosen];
+  const turn = TURN_SECONDS / ((mine.settings && Number(mine.settings.morphSpeed)) || 1);
 
   const player = createMorphPlayer(canvas, FACE_TEMPLATE);
   let playing = true, k = 0, phase = 'rest', timer = 0, n = 0, last = performance.now();
@@ -146,12 +154,12 @@ async function start() {
   const frame = (now) => {
     const dt = Math.min(now - last, 100) / 1000; last = now;
     if (!playing) {
-      k = Math.max(0, k - dt / (TURN_SECONDS * 0.4));           // settle back on the contributed face
+      k = Math.max(0, k - dt / (turn * 0.4));           // settle back on the contributed face
       if (k === 0 && phase !== 'rest') { phase = 'rest'; timer = 0; }
     } else if (phase === 'rest') { timer += dt; if (timer >= REST_SECONDS) phase = 'out'; }
-    else if (phase === 'out') { k = Math.min(1, k + dt / TURN_SECONDS); if (k === 1) { phase = 'hold'; timer = 0; } }
+    else if (phase === 'out') { k = Math.min(1, k + dt / turn); if (k === 1) { phase = 'hold'; timer = 0; } }
     else if (phase === 'hold') { timer += dt; if (timer >= REST_SECONDS) phase = 'back'; }
-    else { k = Math.max(0, k - dt / TURN_SECONDS); if (k === 0) { phase = 'rest'; timer = 0; n++; } }
+    else { k = Math.max(0, k - dt / turn); if (k === 0) { phase = 'rest'; timer = 0; n++; } }
     player.draw(mine, others[n % others.length], ease(k));
     requestAnimationFrame(frame);
   };
@@ -160,7 +168,7 @@ async function start() {
   stage.classList.add('ready');
   label();
   requestAnimationFrame(frame);
-  window.__face = { ok: true, others: others.length, fromParents };
+  window.__face = { ok: true, parents: parents.length, mix: mine.mix, turn };
 }
 start().catch((e) => { console.error(e); window.__face = { ok: false, error: String(e) }; });
 </script>
