@@ -20,6 +20,7 @@ const MAX_UPSCALE = 5;    // faces that would need more enlarging than this are 
 const MAX_LEVEL_ROLL = 0.14; // radians (8 degrees): heads tilted less than this are not rotated
 const LIP_TOP = 13, LIP_BOTTOM = 14; // inner edge of the upper and lower lip
 const MOUTH_MISMATCH = 0.05; // difference in mouth opening (share of eye distance) that counts as open vs shut
+const FEATURE_INSET = 0.38; // how far inside the face outline (in eye distances) the guest's shape takes full effect
 const MAX_PUSH = 0.12;    // cap on how far exaggeration may move one point, as a share of eye distance
 
 // ---------- geometry: shapes are Float32Array of x,y,z per point, in pixels ----------
@@ -403,23 +404,40 @@ export async function createFaceEngine({ size = 512, wasm = 'vendor/mediapipe/wa
    * (1 = plain mix). `hostShare` is how much of the face is the host's (0.5 = half).
    * The guest and the mean are turned in 3D to the host's head angle first.
    */
-  function blend(host, guest, collectiveShape, { strength = DEFAULT_STRENGTH, hostShare = 0.5 } = {}) {
+  function blend(host, guest, collectiveShape, { strength = DEFAULT_STRENGTH, hostShare = 0.5, outlineShare = 0 } = {}) {
     const guestShare = 1 - hostShare;
     const a = host.p3;
     const b = move3(align3(guest.p3, a), guest.p3);
-    const mid = mix(a, b, guestShare);
-    // An open mouth is an expression, not a face shape. When one mouth is open and the other
-    // shut, keep the host's mouth position and ease back to the normal 50/50 mix around it.
     const eye = Math.hypot(a[3 * L_EYE] - a[3 * R_EYE], a[3 * L_EYE + 1] - a[3 * R_EYE + 1], a[3 * L_EYE + 2] - a[3 * R_EYE + 2]);
+    // The host keeps its own head: the outline of the face (jaw, cheeks, hairline) does not move,
+    // so the face is never squeezed or stretched to fit the other one, and hair and ears stay
+    // where they are. Only what is inside the outline (eyes, brows, nose, lips) takes on the
+    // guest's shape. `inside` is 0 on the outline and 1 from a short way in, before any feature.
+    const inside = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      let near = Infinity;
+      for (let n = 0; n < mesh.outline.length; n++) {
+        const p = mesh.outline[n], q = mesh.outline[(n + 1) % mesh.outline.length];
+        const px = a[3 * p], py = a[3 * p + 1], vx = a[3 * q] - px, vy = a[3 * q + 1] - py;
+        const t = clamp01(((a[3 * i] - px) * vx + (a[3 * i + 1] - py) * vy) / (vx * vx + vy * vy + 1e-9));
+        near = Math.min(near, Math.hypot(a[3 * i] - px - t * vx, a[3 * i + 1] - py - t * vy));
+      }
+      // `outlineShare` (0 to 1) lets the outline follow the guest too: 0 keeps the host's head.
+      inside[i] = outlineShare + (1 - outlineShare) * smoothstep(0.04, FEATURE_INSET, near / eye);
+    }
+    // An open mouth is an expression, not a face shape. When one mouth is open and the other
+    // shut, keep the host's mouth position and ease back to the normal mix around it.
     const gap = (p) => Math.hypot(p[3 * LIP_TOP] - p[3 * LIP_BOTTOM], p[3 * LIP_TOP + 1] - p[3 * LIP_BOTTOM + 1]) / eye;
-    if (Math.abs(gap(a) - gap(b)) > MOUTH_MISMATCH) {
-      const reach = 0.3 * eye;
-      for (let i = 0; i < N; i++) {
+    const mouthsDiffer = Math.abs(gap(a) - gap(b)) > MOUTH_MISMATCH;
+    const mid = new Float32Array(a.length);
+    for (let i = 0; i < N; i++) {
+      let w = guestShare * inside[i]; // share of this point's position taken from the guest
+      if (mouthsDiffer) {
         let near = Infinity;
         for (const j of lips) near = Math.min(near, Math.hypot(a[3 * i] - a[3 * j], a[3 * i + 1] - a[3 * j + 1]));
-        const w = guestShare * smoothstep(0, reach, near); // share taken from the guest: 0 at the lips
-        for (let c = 0; c < 3; c++) mid[3 * i + c] = a[3 * i + c] + (b[3 * i + c] - a[3 * i + c]) * w;
+        w *= smoothstep(0, 0.3 * eye, near);
       }
+      for (let c = 0; c < 3; c++) mid[3 * i + c] = a[3 * i + c] + (b[3 * i + c] - a[3 * i + c]) * w;
     }
     let shape = mid;
     if (collectiveShape && strength !== 1) {
@@ -427,15 +445,13 @@ export async function createFaceEngine({ size = 512, wasm = 'vendor/mediapipe/wa
       shape = mix(mean, mid, strength);
       // Soft cap on how far any one point is pushed. Identity differences are small and pass
       // through; a big difference in expression (one mouth open, one shut) would otherwise be
-      // tripled and tear the mouth.
-      const cap = MAX_PUSH * Math.hypot(a[3 * L_EYE] - a[3 * R_EYE], a[3 * L_EYE + 1] - a[3 * R_EYE + 1], a[3 * L_EYE + 2] - a[3 * R_EYE + 2]);
+      // tripled and tear the mouth. The push also fades to nothing at the outline.
+      const cap = MAX_PUSH * eye;
       for (let i = 0; i < shape.length; i += 3) {
         const dx = shape[i] - mid[i], dy = shape[i + 1] - mid[i + 1], dz = shape[i + 2] - mid[i + 2];
         const d = Math.hypot(dx, dy, dz);
-        if (d > 1e-6) {
-          const k = (cap * Math.tanh(d / cap)) / d;
-          shape[i] = mid[i] + dx * k; shape[i + 1] = mid[i + 1] + dy * k; shape[i + 2] = mid[i + 2] + dz * k;
-        }
+        const k = d > 1e-6 ? (inside[i / 3] * cap * Math.tanh(d / cap)) / d : 0;
+        shape[i] = mid[i] + dx * k; shape[i + 1] = mid[i + 1] + dy * k; shape[i + 2] = mid[i + 2] + dz * k;
       }
     }
     const shape2 = xy(shape);
@@ -600,16 +616,20 @@ export async function createFaceEngine({ size = 512, wasm = 'vendor/mediapipe/wa
       gl.uniform1f(uni('k'), k);
       gl.drawElements(gl.TRIANGLES, tris.length, gl.UNSIGNED_SHORT, 0);
     }
-    /** Morph endlessly through `faces` (an array that may keep growing), in random order. */
+    /**
+     * Morph endlessly through `faces` (an array that may keep growing), in random order.
+     * `seconds` is the time for one turn; it may be a function, so the speed can change while playing.
+     */
     function play(faces, { seconds = 1.8 } = {}) {
-      let from = null, to = null, start = 0, running = true;
+      let from = null, to = null, k = 0, last = 0, running = true;
       const pick = () => { let f; do { f = faces[Math.floor(Math.random() * faces.length)]; } while (faces.length > 1 && f === to); return f; };
       const frame = (now) => {
         if (!running) return;
         if (faces.length) {
-          if (!to) { from = pick(); to = pick(); start = now; }
-          let k = (now - start) / (seconds * 1000);
-          if (k >= 1) { from = to; to = pick(); start = now; k = 0; }
+          if (!to) { from = pick(); to = pick(); k = 0; last = now; }
+          k += Math.min(now - last, 100) / ((typeof seconds === 'function' ? seconds() : seconds) * 1000);
+          last = now;
+          if (k >= 1) { from = to; to = pick(); k = 0; }
           draw(from, to, k * k * (3 - 2 * k)); // ease in and out, never resting on one face for long
         }
         requestAnimationFrame(frame);

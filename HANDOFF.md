@@ -2,6 +2,21 @@
 
 Written 12 November 2026. For anyone (person or agent) picking this work up cold. `README.md` describes the project and how the blend works; this file covers what was asked for, why it was built this way, where it stands, and what is left.
 
+## Latest rounds (read this first: it overrides anything older above that disagrees)
+
+Requests from DJ after the first push of V2, and what was built:
+
+- **Result screen is a before/after diagram.** The visitor's own capture on the left, the face they chose on the right, dotted pulsing lines flowing into a large centre face that keeps turning between before (the visitor) and after (the blend). On narrow screens the two sources sit on top and one line flows down. Built in `createReceiptInterface` in `index.html`; the loop is `reveal()` in `src/app.js`.
+- **Copy.** Opening screen: "EVOLVING PORTRAIT keeps the digital artifact of your face". Result screen: "Thank you for contributing to EVOLVING PORTRAIT". The older privacy sentences were removed at DJ's request.
+- **QR code opens `face.html?id=<session>`**: only that visitor's saved face, the thank-you line, number and date, and a link to DJ's project page (https://fl4me.mov/work/evolving-portrait/). It needs the site to be live on the production domain.
+- **Archive wall is radial** (`archive.html`): the collective face in the middle, stored faces in rings around it, each a fixed-size square placed by pixels so nothing can be squashed. Rings run past the screen edges and are cropped there, on purpose. All faces the same size and brightness.
+- **Opening face is larger**: its visible oval is about as wide as the "Want to see your face?" box.
+- **The blend no longer squeezes the face.** In `blend()` (`src/face-engine.js`) the host's face outline stays where it is; only points inside it (eyes, brows, nose, lips) take the guest's shape and the exaggeration. `FEATURE_INSET` is how far in from the outline the guest takes full effect. `outlineShare` (0 to 1) brings the old whole-face behaviour back.
+- **Debug panel (press D on the visitor page).** Sliders for Distortion (`strength`), Mix (`hostShare`), Head shape from chosen face (`outlineShare`) and Morph speed (`morphSpeed`), each with a round "i" explanation. On the result screen a slider change re-blends the last capture as a preview only; the saved face never changes. "Save as default" stores the values in that browser (`localStorage` key `ep-defaults`); "Reset" returns to them; "Original values" clears them. Defaults in code: 300%, visitor one third, outline 0, speed 100%.
+- **One morph speed everywhere.** A turn from face to face takes 3.8 s at 100% on the opening screen, the result screen and the wall's centre face. The wall reads the saved `morphSpeed` from the same browser.
+
+Still not done: a test on a real phone or iPad, the items under "What is left", and removing leftover V1 code in `index.html`.
+
 ## Where things are
 
 - **Working copy:** `~/VSCode/CAPTCHA`, branch `V2`, cut from `mobile-testing`. Nothing on `V2` is committed yet.

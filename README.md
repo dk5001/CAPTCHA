@@ -63,6 +63,14 @@ The plain averaged face is still available in `lab.html` for comparison.
 - Remove the leftover V1 files and code once V2 is accepted (see `HANDOFF.md`).
 - Merge and deploy. The live site still serves V1.
 
+## Latest changes
+
+- The result screen is a before/after diagram: your capture, the face you chose, and a centre face that keeps turning between you and the blend.
+- The QR code opens `face.html`, which shows only your saved face and links to the project page.
+- The archive wall (`archive.html`) is radial: the collective face in the middle with the stored faces in rings around it.
+- The blend keeps the visitor's own head shape; only the features inside the face outline change, so faces are no longer squeezed.
+- Press D on the visitor page for a debug panel with sliders for distortion, mix, head shape and morph speed. Values can be saved as that browser's default.
+
 ## Trying the V2 engine
 
 The page loads its code as modules, so it needs a web server; opening the file directly will not work.

@@ -9,28 +9,27 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
 
-    /* The wall: stored faces all around, the collective face in the middle. */
-    #wall { display: grid; width: 100vw; height: 100vh; }
+    /* The wall is radial: the collective face in the middle, stored faces in rings around it.
+       Every face is a square placed by pixel size, so it can never be stretched or squashed. */
+    #wall { position: fixed; inset: 0; overflow: hidden; }
 
     /* Each stored face floats on black inside the same soft oval as the faces in the CAPTCHA
-       grid (the oval the morph player draws around the template face). No frames, no gaps,
-       and every face is shown at the same brightness. */
-    .cell {
-      position: relative; overflow: hidden; background: #000;
+       grid. No frames, and every face is shown at the same brightness. */
+    .face, #centre { position: absolute; transform: translate(-50%, -50%); }
+    .face {
       -webkit-mask-image: radial-gradient(ellipse 44.3% 51.2% at 49.8% 52.2%, #000 70%, transparent 100%);
       mask-image: radial-gradient(ellipse 44.3% 51.2% at 49.8% 52.2%, #000 70%, transparent 100%);
     }
-    .cell img {
+    .face img {
       position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: cover;
       filter: grayscale(100%);
       opacity: 0;
       transition: opacity 1.2s ease;
     }
-    .cell img.visible { opacity: 1; }
+    .face img.visible { opacity: 1; }
 
-    #centre { position: relative; background: #000; display: flex; align-items: center; justify-content: center; }
-    #collective { width: 100%; height: 100%; object-fit: contain; }
+    #collective { display: block; width: 100%; height: 100%; }
 
     #status {
       position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
@@ -48,7 +47,11 @@ import { createArchive } from './src/archive.js';
 import { FACE_TEMPLATE } from './src/face-template.js';
 import { HIDDEN_TILES } from './src/hidden-tiles.js';
 
-const MORPH_SECONDS = 2.6;      // time to turn from one face into the next
+// Time to turn from one face into the next: the same as on the visitor page, including a morph
+// speed saved as this browser's default in the debug panel there.
+let morphSpeed = 1;
+try { morphSpeed = Number(JSON.parse(localStorage.getItem('ep-defaults') || '{}').morphSpeed) || 1; } catch (e) { /* no storage */ }
+const MORPH_SECONDS = 3.8 / morphSpeed;
 const SWAP_EVERY_MS = 4000;     // how often one wall cell changes to a different stored face
 const REFRESH_EVERY_MS = 30000; // how often to look for newly contributed faces
 
@@ -66,36 +69,44 @@ async function listIds() {
   return (await archive.randomFaces(500)).filter((id) => !HIDDEN_TILES.has(id));
 }
 
-/** Lay out the grid with a square block reserved in the middle for the collective face. */
+/** Lay out the rings of faces around the collective face in the middle. */
 function buildWall() {
-  const W = innerWidth, H = innerHeight;
-  let rows = Math.max(4, Math.min(7, Math.round(H / 170)));
-  let cols = Math.max(4, Math.round((W / H) * rows));
-  let block = Math.max(2, Math.round(Math.min(rows, cols) * 0.55));
-  if ((rows - block) % 2) rows++;   // keep the block exactly centred
-  if ((cols - block) % 2) cols++;
-  wall.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  wall.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+  const W = innerWidth, H = innerHeight, short = Math.min(W, H);
+  const centreSize = Math.min(520, short * 0.56);            // the collective face
+  const size = Math.max(62, Math.min(150, short / 5));        // every stored face, all the same
   wall.innerHTML = '';
   cells.length = 0;
 
+  const place = (el, x, y, d) => {
+    el.style.left = `${W / 2 + x}px`; el.style.top = `${H / 2 + y}px`;
+    el.style.width = el.style.height = `${d}px`;
+  };
+
   const centre = document.createElement('div');
   centre.id = 'centre';
-  const c0 = (cols - block) / 2 + 1, r0 = (rows - block) / 2 + 1;
-  centre.style.gridColumn = `${c0} / span ${block}`;
-  centre.style.gridRow = `${r0} / span ${block}`;
+  place(centre, 0, 0, centreSize);
   const canvas = document.createElement('canvas');
   canvas.id = 'collective'; canvas.width = canvas.height = 512;
   canvas.setAttribute('aria-label', 'The collective face, turning into each stored face in turn');
   centre.append(canvas);
   wall.append(centre);
 
-  const count = cols * rows - block * block;
-  for (let i = 0; i < count; i++) {
-    const el = document.createElement('div'); el.className = 'cell';
-    const img = document.createElement('img'); img.alt = '';
-    el.append(img); wall.append(el);
-    cells.push({ el, img, id: null });
+  // Rings go out until they pass the corners of the screen; faces at the edges are cut off by the screen, so the wall is full.
+  const reach = Math.hypot(W, H) / 2;
+  const fitX = W / 2 + size * 0.4, fitY = H / 2 + size * 0.45;
+  for (let ring = 0, radius = centreSize * 0.47 + size * 0.5; radius < reach; ring++, radius += size * 0.92) {
+    const count = Math.floor((2 * Math.PI * radius) / (size * 0.86));
+    const turn = ring % 2 ? Math.PI / count : 0;              // alternate rings sit in the gaps
+    for (let i = 0; i < count; i++) {
+      const angle = -Math.PI / 2 + turn + (i / count) * 2 * Math.PI;
+      const x = Math.cos(angle) * radius, y = Math.sin(angle) * radius;
+      if (Math.abs(x) > fitX || Math.abs(y) > fitY) continue;
+      const el = document.createElement('div'); el.className = 'face';
+      place(el, x, y, size);
+      const img = document.createElement('img'); img.alt = '';
+      el.append(img); wall.append(el);
+      cells.push({ el, img, id: null });
+    }
   }
   return canvas;
 }
@@ -133,8 +144,7 @@ try {
 
   // Wall cells keep changing, so over time every stored face is seen.
   setInterval(() => {
-    const idle = cells.filter((c) => !c.el.classList.contains('lit'));
-    if (idle.length) show(idle[Math.floor(Math.random() * idle.length)], unusedId());
+    show(cells[Math.floor(Math.random() * cells.length)], unusedId());
   }, SWAP_EVERY_MS);
 
   // Newly contributed faces go to a wall cell and are the next face the centre turns into.
@@ -173,7 +183,6 @@ try {
 
   let from = (await nextTarget()), to = (await nextTarget());
   let start = performance.now(), loading = false;
-  to.cell.el.classList.add('lit');
   status.textContent = `${total} faces`;
   const frame = (now) => {
     let k = (now - start) / (MORPH_SECONDS * 1000);
@@ -181,11 +190,9 @@ try {
       loading = true;
       nextTarget().then((next) => {
         if (next) {
-          to.cell.el.classList.remove('lit');
           player.release(from.flat);
           from = to; to = next; start = performance.now();
-          to.cell.el.classList.add('lit');
-          status.textContent = `${total} faces`;
+                  status.textContent = `${total} faces`;
         }
         loading = false;
       });

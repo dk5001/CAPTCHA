@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Evolving Portrait</title>
+  <script src="config.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: #000; color: #f5f5f0;
+      font-family: Arial, Helvetica, sans-serif; text-align: center;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; padding: 24px 16px;
+    }
+    #face { width: min(82vw, 60vh, 520px); aspect-ratio: 1; object-fit: cover; filter: grayscale(100%); opacity: 0; transition: opacity 1.2s ease; }
+    #face.shown { opacity: 1; }
+    p { margin: 0; font-size: clamp(15px, 3.8vw, 20px); }
+    .small { color: #969696; font-size: clamp(11px, 2.8vw, 14px); }
+    a { color: #f5f5f0; }
+    nav { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; font-size: clamp(13px, 3.4vw, 16px); }
+  </style>
+</head>
+<body>
+  <img id="face" alt="A face contributed to Evolving Portrait">
+  <p id="message">Thank you for contributing to EVOLVING PORTRAIT</p>
+  <p class="small" id="detail"></p>
+  <nav>
+    <a href="https://fl4me.mov/work/evolving-portrait/">About the project and the artist</a>
+    <a href="archive.html">See the archive wall</a>
+  </nav>
+
+<script>
+  // Shows one contributed face. The address carries its number: face.html?id=subject_123456
+  const id = new URLSearchParams(location.search).get('id') || '';
+  const face = document.getElementById('face');
+  const message = document.getElementById('message');
+  const detail = document.getElementById('detail');
+
+  if (!/^subject_[0-9]{4,12}$/.test(id)) {
+    face.remove();
+    message.textContent = 'EVOLVING PORTRAIT';
+    detail.textContent = 'This link does not point to a face.';
+  } else {
+    detail.textContent = 'No. ' + id.replace('subject_', '');
+    const url = SUPABASE_URL + '/storage/v1/object/public/faces/' + id + '.png';
+    let tries = 0;
+    face.onload = () => face.classList.add('shown');
+    // The face is uploaded a moment after it is made, so allow a few seconds for it to arrive.
+    face.onerror = () => {
+      if (++tries <= 6) setTimeout(() => { face.src = url + '?retry=' + tries; }, 1500);
+      else { face.remove(); detail.textContent += ' · this face has not arrived in the archive'; }
+    };
+    face.src = url;
+    // Add the date it was contributed, when the archive has it.
+    fetch(SUPABASE_URL + '/rest/v1/face_index?select=created_at&session_id=eq.' + id, {
+      headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }
+    }).then(r => r.ok ? r.json() : []).then(rows => {
+      if (rows[0]) detail.textContent += ' · ' + new Date(rows[0].created_at).toLocaleDateString();
+    }).catch(() => {});
+  }
+</script>
+</body>
+</html>

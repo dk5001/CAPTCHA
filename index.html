@@ -40,9 +40,10 @@
         height: 100%;
         display: flex;
         flex-direction: column;
-        gap: 24px;
+        gap: 12px;
         justify-content: center;
         align-items: center;
+        overflow: hidden;
         z-index: 10;
       }
 
@@ -55,7 +56,10 @@
       }
 
       #collective-face {
-        width: min(340px, 62vw, 42vh);
+        /* Nearly as wide as the box below it, as long as the screen is tall enough. */
+        width: min(600px, 112vw, calc(100vh - 210px));
+        width: min(600px, 112vw, calc(100dvh - 210px));
+        max-width: none; flex: none;
         height: auto;
         aspect-ratio: 1;
         background: #000;
@@ -219,14 +223,60 @@
         mask-image: radial-gradient(ellipse 40% 48% at 50% 47%, #000 62%, transparent 100%);
       }
 
-      #reveal-holder { width: min(560px, 88vw, 62vh); aspect-ratio: 1; flex: none; }
-      #reveal-face { width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 1.4s ease; }
+      #reveal-diagram {
+        display: grid; align-items: center; justify-content: center; flex: none;
+        grid-template-columns: var(--side) var(--line) var(--centre) var(--line) var(--side);
+        grid-template-areas: "you linel centre liner chosen";
+        --centre: min(46vw, 50vh, 500px); --side: min(17vw, 24vh, 210px); --line: min(8vw, 110px);
+        opacity: 0; transition: opacity 0.9s ease;
+      }
+      #reveal-diagram.shown { opacity: 1; }
+      #reveal-diagram figure { margin: 0; }
+      #reveal-you { grid-area: you; } #reveal-chosen { grid-area: chosen; } #reveal-centre { grid-area: centre; }
+      #reveal-line-l { grid-area: linel; } #reveal-line-r { grid-area: liner; } #reveal-line-d { grid-area: lined; display: none; }
+      .reveal-side img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; filter: grayscale(100%); }
+      #reveal-diagram figcaption { margin-top: 8px; color: #969696; font-size: clamp(10px, 2.4vw, 13px); letter-spacing: 0.08em; text-transform: uppercase; }
+      #reveal-holder { width: 100%; aspect-ratio: 1; }
+
+      /* Dotted lines that flow from the two sources into the result. */
+      .reveal-line {
+        height: 4px; margin-bottom: 26px;
+        background-image: radial-gradient(circle, #f5f5f0 1.5px, transparent 2px);
+        background-size: 14px 4px; background-repeat: repeat-x;
+        animation: ep-flow-right 0.9s linear infinite, ep-line-pulse 1.8s ease-in-out infinite;
+      }
+      .reveal-line.to-left { animation-name: ep-flow-left, ep-line-pulse; }
+      .reveal-line.to-down {
+        width: 4px; height: 34px; margin: 4px auto; justify-self: center;
+        background-size: 4px 14px; background-repeat: repeat-y;
+        animation-name: ep-flow-down, ep-line-pulse;
+      }
+      @keyframes ep-flow-right { from { background-position: 0 0; } to { background-position: 14px 0; } }
+      @keyframes ep-flow-left { from { background-position: 14px 0; } to { background-position: 0 0; } }
+      @keyframes ep-flow-down { from { background-position: 0 0; } to { background-position: 0 14px; } }
+      @keyframes ep-line-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+      /* Narrow screens: the two sources sit side by side on top and flow down into the result. */
+      @media (max-width: 640px) {
+        #reveal-diagram {
+          grid-template-columns: var(--side) var(--line) var(--line) var(--side);
+          grid-template-areas: "you linel liner chosen" "lined lined lined lined" "centre centre centre centre";
+          --side: 27vw; --line: 9vw;
+        }
+        #reveal-line-d { display: block; }
+        #reveal-centre { width: min(82vw, 46vh); justify-self: center; }
+      }
+      #reveal-face { width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 0.9s ease; }
       #reveal-face.shown { opacity: 1; }
       #reveal-status { min-height: 1.4em; color: #969696; font-size: clamp(13px, 3vw, 16px); }
       #reveal-footer { opacity: 0; transition: opacity 1.5s ease; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: clamp(15px, 3.6vw, 20px); }
       #reveal-footer.visible { opacity: 1; }
       .reveal-small { color: #969696; font-size: clamp(11px, 2.6vw, 14px); }
-      a.reveal-small { text-decoration: underline; }
+      .reveal-qr { width: clamp(96px, 22vw, 132px); height: auto; aspect-ratio: 1; margin-top: 6px; background: #fff; }
+
+      /* The captured face pulses gently while it is being blended. */
+      @keyframes ep-working { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+      .grid-item.processing { animation: ep-working 0.9s ease-in-out infinite; }
       .reveal-spacer { flex: 1; }
 
       .grid-item img {
@@ -481,7 +531,7 @@
           </div>
           <img src="cog.png" class="cog-icon" alt="Cog icon">
         </div>
-        <p id="privacy-note">Your photo never leaves this device. We keep what you became.</p>
+        <p id="privacy-note">EVOLVING PORTRAIT keeps the digital artifact of your face</p>
       </div>
 
       <!-- Question Interface -->
@@ -1161,18 +1211,26 @@
             window.selectedImageSrc = displayedImages[selectedTile.dataset.index];
             
             // V2: no question step. Go straight from the capture to the blend.
-            // Dip to black: the grid fades out, the screen rests on black, then the face fades up.
-            setTimeout(() => {
+            // Start blending straight away, while the captured face is still on screen and gently
+            // pulsing, so the visitor sees it being worked on and nothing waits on a blank screen.
+            const tile = selectedTile;
+            tile.classList.add('processing');
+            window.pendingBlend = window.EP.blend(window.capturedImage, window.selectedImageSrc)
+              .then(result => ({ result }), error => ({ error }));
+            // Dip to black once the blend is ready: the grid fades out, the screen rests on
+            // black for a moment, then the face fades up.
+            window.pendingBlend.then(() => {
               const grid = document.getElementById('grid-interface');
-              grid.style.transition = 'opacity 0.9s ease';
+              grid.style.transition = 'opacity 0.6s ease';
               grid.style.opacity = '0';
               setTimeout(() => {
+                tile.classList.remove('processing');
                 grid.style.display = 'none';
                 grid.style.transition = '';
                 grid.style.opacity = '';
                 createReceiptInterface(window.capturedImage, window.selectedImageSrc);
-              }, 1300);
-            }, 1000);
+              }, 900);
+            });
           };
           
           capturedImage.src = canvas.toDataURL('image/png');
@@ -1253,9 +1311,19 @@
         receiptContainer.id = 'receipt-interface';
 
         // V2: one face on black. It starts as the visitor and slowly becomes the blended face.
+        // A diagram: the visitor's photo on the left, the face they chose on the right, and in the
+        // middle the result, moving between before and after. Dotted lines flow from both sides
+        // into the middle. On a narrow screen the two sources sit on top and flow down.
         receiptContainer.innerHTML = `
           <div class="reveal-spacer"></div>
-          <div id="reveal-holder"></div>
+          <div id="reveal-diagram">
+            <figure class="reveal-side" id="reveal-you"><img src="${capturedImage.src}" alt="Your photo"><figcaption>You</figcaption></figure>
+            <div class="reveal-line to-right" id="reveal-line-l"></div>
+            <figure id="reveal-centre"><div id="reveal-holder"></div><figcaption>What you became</figcaption></figure>
+            <div class="reveal-line to-left" id="reveal-line-r"></div>
+            <figure class="reveal-side" id="reveal-chosen"><img src="${selectedImageSrc}" alt="The face you chose"><figcaption>The face you chose</figcaption></figure>
+            <div class="reveal-line to-down" id="reveal-line-d"></div>
+          </div>
           <div id="reveal-status"></div>
           <div id="reveal-footer"></div>
           <div class="reveal-spacer"></div>
@@ -1267,6 +1335,13 @@
       }
 
       // Blend the visitor's photo with the chosen face, then show the receipt.
+      // Address of the page that shows one contributed face, for the QR code.
+      // On a local test server, point at the live site.
+      function facePageUrl(sessionId) {
+        const local = /^(localhost|127\.|\[::1\])/.test(location.hostname);
+        return (local ? 'https://evolvingportrait.me' : location.origin) + '/face.html?id=' + encodeURIComponent(sessionId);
+      }
+
       async function runV2Blend(capturedImage, selectedImageSrc) {
         const sessionId = 'subject_' + Math.floor(100000 + Math.random() * 900000);
         const statusEl = document.getElementById('reveal-status');
@@ -1277,18 +1352,23 @@
           document.getElementById('reset-button').addEventListener('click', resetApp);
         };
         try {
-          const result = await window.EP.blend(capturedImage, selectedImageSrc);
+          // The blend was started at the moment of capture (see captureImage).
+          const outcome = await (window.pendingBlend || window.EP.blend(capturedImage, selectedImageSrc).then(result => ({ result }), error => ({ error })));
+          window.pendingBlend = null;
+          if (outcome.error) throw outcome.error;
+          const result = outcome.result;
           statusEl.textContent = '';
           // Bookkeeping and saving happen while the face is morphing. Only the artifact
           // (a face in an oval, a third the visitor's) is saved or reused.
           updateReceiptWithResults(capturedImage, selectedImageSrc, result.artifactUrl, sessionId);
           window.EP.saveTile(sessionId, result).catch(e => debug('Tile save failed: ' + e.message));
+          document.getElementById('reveal-diagram').classList.add('shown');
           await window.EP.reveal(document.getElementById('reveal-holder'), result);
           showFooter(`
-            <p>You are now part of the collective face.</p>
-            <p class="reveal-small">Your photo never left this device. Only this face is kept, and a third of it is yours.</p>
+            <p>Thank you for contributing to EVOLVING PORTRAIT</p>
             <p class="reveal-small">No. ${sessionId.replace('subject_', '')} · ${new Date().toLocaleDateString()}</p>
-            <a class="reveal-small" href="archive.html">See the archive wall</a>
+            <img class="reveal-qr" alt="QR code for your face" src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=12&data=${encodeURIComponent(facePageUrl(sessionId))}">
+            <p class="reveal-small">Scan to keep your face</p>
           `);
         } catch (e) {
           debug('V2 blend failed: ' + e.message);
@@ -1489,6 +1569,106 @@
 
         document.body.appendChild(openDisplayBtn);
 
+        // Debug panel: sliders for how the two faces are blended. Settings stay in this browser.
+        let blendPanelEl = null;
+        function blendPanel() {
+          if (blendPanelEl) return blendPanelEl;
+          const panel = blendPanelEl = document.createElement('div');
+          panel.id = 'blend-panel';
+          panel.style.cssText = 'position:fixed;top:12px;left:12px;z-index:2147483647;display:none;flex-direction:column;gap:10px;width:min(300px,calc(100vw - 24px));padding:14px;background:rgba(20,20,20,0.92);border:1px solid #444;border-radius:8px;color:#eee;font:13px/1.3 Arial,sans-serif;';
+          const s = window.EP ? window.EP.settings : { strength: 3, hostShare: 1 / 3, outlineShare: 0, morphSpeed: 1 };
+          const rows = [
+            // key, label, min, max, value shown as a percentage, how to read the value back
+            ['strength', 'Distortion', 100, 500, () => Math.round(s.strength * 100), v => v / 100, v => v + '%',
+              'How far the eyes, brows, nose and lips are pushed away from the average of the stored faces. 100% is a plain mix of the two faces. Higher values exaggerate whatever makes this face different, which is what makes it look uncanny.'],
+            ['hostShare', 'Mix', 0, 100, () => Math.round(s.hostShare * 100), v => v / 100, v => 'you ' + v + '% · chosen ' + (100 - v) + '%',
+              'The weight of the two faces, in both skin and feature shape. To the left the result is mostly the chosen face; to the right it is mostly the visitor. The saved face is this mix, so a low value keeps less of the real person.'],
+            ['outlineShare', 'Head shape from chosen face', 0, 100, () => Math.round(s.outlineShare * 100), v => v / 100, v => v + '%',
+              'How much the outline of the face (jaw, cheeks, hairline) follows the chosen face. At 0% the visitor keeps their own head shape and only the features inside it change. Higher values reshape the whole face, which can look squeezed or stretched.'],
+            ['morphSpeed', 'Morph speed', 25, 400, () => Math.round(s.morphSpeed * 100), v => v / 100, v => v + '%',
+              'How fast faces turn into one another: the collective face on the opening screen and the before and after face on the result screen. 100% is the normal speed, 200% is twice as fast. It changes straight away and does not affect the saved face.'],
+          ];
+          const title = document.createElement('div');
+          title.textContent = 'Blend settings'; title.style.cssText = 'font-weight:bold;letter-spacing:0.04em;';
+          panel.appendChild(title);
+          let timer = null;
+          const note = document.createElement('div');
+          note.style.cssText = 'color:#969696;font-size:11px;';
+          const idle = 'Sliders apply from the next capture until the page is reloaded; Save as default keeps them in this browser. On the result screen the face updates as a preview only.';
+          note.textContent = idle;
+          const inputs = [];
+          rows.forEach(([key, label, min, max, read, toValue, show, about]) => {
+            const row = document.createElement('label');
+            row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+            const head = document.createElement('div');
+            head.style.cssText = 'display:flex;justify-content:space-between;gap:8px;';
+            const name = document.createElement('span'); name.textContent = label;
+            name.style.cssText = 'display:flex;align-items:center;gap:6px;';
+            // Round "i" button: shows or hides what this slider does.
+            const info = document.createElement('button');
+            info.type = 'button'; info.textContent = 'i';
+            info.setAttribute('aria-label', 'What does ' + label + ' do?');
+            info.setAttribute('aria-expanded', 'false');
+            info.style.cssText = 'width:18px;height:18px;flex:none;padding:0;border-radius:50%;border:1px solid #888;background:transparent;color:#ccc;font:italic bold 11px/1 Georgia,serif;cursor:pointer;';
+            const help = document.createElement('div');
+            help.textContent = about;
+            help.style.cssText = 'display:none;color:#b8b8b8;font-size:11px;line-height:1.4;';
+            info.addEventListener('click', e => {
+              e.preventDefault();
+              const open = help.style.display === 'none';
+              help.style.display = open ? 'block' : 'none';
+              info.setAttribute('aria-expanded', String(open));
+              info.style.background = open ? '#ccc' : 'transparent'; info.style.color = open ? '#111' : '#ccc';
+            });
+            name.append(info);
+            const value = document.createElement('span'); value.style.color = '#969696';
+            head.append(name, value);
+            const input = document.createElement('input');
+            input.type = 'range'; input.min = min; input.max = max; input.step = 1; input.style.width = '100%';
+            const refresh = () => { input.value = read(); value.textContent = show(Number(input.value)); };
+            refresh(); inputs.push(refresh);
+            input.addEventListener('input', () => {
+              value.textContent = show(Number(input.value));
+              if (!window.EP) return;
+              window.EP.setSettings({ [key]: toValue(Number(input.value)) });
+              clearTimeout(timer);
+              if (key === 'morphSpeed') return; // speed needs no new blend
+              timer = setTimeout(() => { if (window.EP.preview()) note.textContent = 'Preview updated. The saved face does not change.'; }, 150);
+            });
+            // Keep the D key and arrow keys on a slider from reaching the page.
+            input.addEventListener('keydown', e => e.stopPropagation());
+            row.append(head, help, input);
+            panel.appendChild(row);
+          });
+          const buttonCss = 'padding:6px 10px;background:#333;color:#eee;border:1px solid #555;border-radius:4px;cursor:pointer;font-size:12px;';
+          const button = (text, css, onClick) => {
+            const el = document.createElement('button');
+            el.type = 'button'; el.textContent = text; el.style.cssText = buttonCss + css;
+            el.addEventListener('click', () => { if (window.EP) onClick(); });
+            return el;
+          };
+          const apply = (message) => { inputs.forEach(f => f()); window.EP.preview(); note.textContent = message; };
+          const save = button('Save as default', 'background:#eee;color:#111;border-color:#eee;', () => {
+            note.textContent = window.EP.saveDefaults()
+              ? 'Saved. This browser now starts with these values.'
+              : 'Could not save: this browser is blocking storage.';
+          });
+          const reset = button('Reset', '', () => {
+            window.EP.setSettings(window.EP.savedDefaults());
+            apply('Back to the saved default.');
+          });
+          const original = button('Original values', '', () => {
+            window.EP.clearDefaults();
+            apply('Back to the original values. The saved default was cleared.');
+          });
+          const buttons = document.createElement('div');
+          buttons.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+          buttons.append(save, reset, original);
+          panel.append(buttons, note);
+          document.body.appendChild(panel);
+          return panel;
+        }
+
         // Press D to toggle debug overlay buttons
         let debugMode = false;
         document.addEventListener('keydown', function(e) {
@@ -1499,6 +1679,7 @@
             const show = debugMode ? 'block' : 'none';
             if (displayBtnEl) displayBtnEl.style.display = show;
             if (switchBtnEl) switchBtnEl.style.display = show;
+            blendPanel().style.display = debugMode ? 'flex' : 'none';
             debug('Debug mode: ' + (debugMode ? 'ON' : 'OFF'));
           }
         });
