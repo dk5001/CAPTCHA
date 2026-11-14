@@ -283,6 +283,113 @@ class Warper {
   }
 }
 
+// ---------- morph player ----------
+
+let sharedMesh = null;
+
+/**
+ * Draws a continuous morph between flattened faces on `canvas`. Each frame is one GPU draw:
+ * the mesh slides from one face's shape to the next while the two tiles cross-fade.
+ * It needs no face detection, so pages that only play stored faces (the archive wall, the
+ * single face page) use it without starting the engine or downloading its models.
+ */
+export function createMorphPlayer(canvas, template, { vignette = true, size = 512 } = {}) {
+  const mesh = sharedMesh || (sharedMesh = buildMesh());
+  const border = borderPoints(size);
+  const withBorder = (pts2) => { const out = new Float32Array(pts2.length + border.length); out.set(pts2); out.set(border, pts2.length); return out; };
+  const triangulate = (shape2) => new Uint16Array([...mesh.tris, ...ringTriangles(shape2, mesh.outline, border)].flat());
+  const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: true });
+  if (!gl) throw new Error('WebGL is not available');
+  const compile = (type, src) => { const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh); return sh; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER,
+    'precision mediump float;attribute vec2 a;attribute vec2 b;attribute vec2 t;uniform float k;varying vec2 v;' +
+    'void main(){v=t;vec2 p=mix(a,b,k);gl_Position=vec4(p.x*2.-1.,1.-p.y*2.,0.,1.);}'));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER,
+    'precision mediump float;varying vec2 v;uniform sampler2D A;uniform sampler2D B;uniform float k;uniform vec4 oval;uniform float vig;' +
+    'void main(){vec3 c=mix(texture2D(A,v).rgb,texture2D(B,v).rgb,k);float d=length((v-oval.xy)/oval.zw);' +
+    'gl_FragColor=vec4(c*(1.-vig*smoothstep(0.92,1.3,d)),1.);}'));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('Morph shader failed: ' + gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const loc = (n) => gl.getAttribLocation(prog, n), uni = (n) => gl.getUniformLocation(prog, n);
+  const norm = (pts2) => pts2.map((v) => v / size);
+  const template2 = withBorder(xy(template));
+  const tris = triangulate(xy(template));
+  const buffer = (name, data) => {
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(loc(name)); gl.vertexAttribPointer(loc(name), 2, gl.FLOAT, false, 0, 0);
+    return buf;
+  };
+  buffer('t', norm(template2));
+  const bufA = buffer('a', norm(template2)), bufB = buffer('b', norm(template2));
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, tris, gl.STATIC_DRAW);
+  // Soft oval around the head so hair and background fall away to black.
+  let x0 = 1, x1 = 0, y0 = 1, y1 = 0;
+  for (const i of mesh.outline) { const x = template[3 * i] / size, y = template[3 * i + 1] / size; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  gl.uniform4f(uni('oval'), (x0 + x1) / 2, (y0 + y1) / 2 - 0.03, (x1 - x0) * 0.62, (y1 - y0) * 0.62);
+  gl.uniform1f(uni('vig'), vignette ? 1 : 0);
+  gl.uniform1i(uni('A'), 0); gl.uniform1i(uni('B'), 1);
+  const textures = new Map(); // one GPU texture per flattened face, made on first use
+  const textureFor = (flat) => {
+    if (!textures.has(flat)) {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      for (const [key, val] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, key, val);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, flat.tile);
+      textures.set(flat, tex);
+    }
+    return textures.get(flat);
+  };
+  let bound = [null, null];
+  /** Draw the face that is `k` of the way from flattened face `from` to `to` (0..1). */
+  function draw(from, to, k) {
+    if (bound[0] !== from || bound[1] !== to) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufA); gl.bufferData(gl.ARRAY_BUFFER, norm(withBorder(xy(from.shape))), gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufB); gl.bufferData(gl.ARRAY_BUFFER, norm(withBorder(xy(to.shape))), gl.DYNAMIC_DRAW);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, textureFor(from));
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, textureFor(to));
+      bound = [from, to];
+    }
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform1f(uni('k'), k);
+    gl.drawElements(gl.TRIANGLES, tris.length, gl.UNSIGNED_SHORT, 0);
+  }
+  /**
+   * Morph endlessly through `faces` (an array that may keep growing), in random order.
+   * `seconds` is the time for one turn; it may be a function, so the speed can change while playing.
+   */
+  function play(faces, { seconds = 1.8 } = {}) {
+    let from = null, to = null, k = 0, last = 0, running = true;
+    const pick = () => { let f; do { f = faces[Math.floor(Math.random() * faces.length)]; } while (faces.length > 1 && f === to); return f; };
+    const frame = (now) => {
+      if (!running) return;
+      if (faces.length) {
+        if (!to) { from = pick(); to = pick(); k = 0; last = now; }
+        k += Math.min(now - last, 100) / ((typeof seconds === 'function' ? seconds() : seconds) * 1000);
+        last = now;
+        if (k >= 1) { from = to; to = pick(); k = 0; }
+        draw(from, to, k * k * (3 - 2 * k)); // ease in and out, never resting on one face for long
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    return () => { running = false; };
+  }
+  /** Free the GPU texture of a face that has left the playlist. */
+  function release(flat) {
+    const tex = textures.get(flat);
+    if (tex && bound[0] !== flat && bound[1] !== flat) { gl.deleteTexture(tex); textures.delete(flat); }
+  }
+  /** Free every GPU texture (used after one-off frames). */
+  function clear() {
+    for (const tex of textures.values()) gl.deleteTexture(tex);
+    textures.clear(); bound = [null, null];
+  }
+  return { canvas, draw, play, release, clear };
+}
+
 // ---------- engine ----------
 
 export async function createFaceEngine({ size = 512, wasm = 'vendor/mediapipe/wasm', models = 'models' } = {}) {
@@ -553,107 +660,13 @@ export async function createFaceEngine({ size = 512, wasm = 'vendor/mediapipe/wa
     return { tile, shape: move3(align3(face.p3, template), face.p3) };
   }
 
-  /**
-   * Draws a continuous morph between flattened faces on `canvas`. Each frame is one GPU draw:
-   * the mesh slides from one face's shape to the next while the two tiles cross-fade.
-   */
-  function createMorphPlayer(canvas, template, { vignette = true } = {}) {
-    const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: true });
-    if (!gl) throw new Error('WebGL is not available');
-    const compile = (type, src) => { const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh); return sh; };
-    const prog = gl.createProgram();
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER,
-      'precision mediump float;attribute vec2 a;attribute vec2 b;attribute vec2 t;uniform float k;varying vec2 v;' +
-      'void main(){v=t;vec2 p=mix(a,b,k);gl_Position=vec4(p.x*2.-1.,1.-p.y*2.,0.,1.);}'));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER,
-      'precision mediump float;varying vec2 v;uniform sampler2D A;uniform sampler2D B;uniform float k;uniform vec4 oval;uniform float vig;' +
-      'void main(){vec3 c=mix(texture2D(A,v).rgb,texture2D(B,v).rgb,k);float d=length((v-oval.xy)/oval.zw);' +
-      'gl_FragColor=vec4(c*(1.-vig*smoothstep(0.92,1.3,d)),1.);}'));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('Morph shader failed: ' + gl.getProgramInfoLog(prog));
-    gl.useProgram(prog);
-    const loc = (n) => gl.getAttribLocation(prog, n), uni = (n) => gl.getUniformLocation(prog, n);
-    const norm = (pts2) => pts2.map((v) => v / size);
-    const template2 = withBorder(xy(template));
-    const tris = triangulate(xy(template));
-    const buffer = (name, data) => {
-      const buf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(loc(name)); gl.vertexAttribPointer(loc(name), 2, gl.FLOAT, false, 0, 0);
-      return buf;
-    };
-    buffer('t', norm(template2));
-    const bufA = buffer('a', norm(template2)), bufB = buffer('b', norm(template2));
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, tris, gl.STATIC_DRAW);
-    // Soft oval around the head so hair and background fall away to black.
-    let x0 = 1, x1 = 0, y0 = 1, y1 = 0;
-    for (const i of mesh.outline) { const x = template[3 * i] / size, y = template[3 * i + 1] / size; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-    gl.uniform4f(uni('oval'), (x0 + x1) / 2, (y0 + y1) / 2 - 0.03, (x1 - x0) * 0.62, (y1 - y0) * 0.62);
-    gl.uniform1f(uni('vig'), vignette ? 1 : 0);
-    gl.uniform1i(uni('A'), 0); gl.uniform1i(uni('B'), 1);
-    const textures = new Map(); // one GPU texture per flattened face, made on first use
-    const textureFor = (flat) => {
-      if (!textures.has(flat)) {
-        const tex = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        for (const [key, val] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, key, val);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, flat.tile);
-        textures.set(flat, tex);
-      }
-      return textures.get(flat);
-    };
-    let bound = [null, null];
-    /** Draw the face that is `k` of the way from flattened face `from` to `to` (0..1). */
-    function draw(from, to, k) {
-      if (bound[0] !== from || bound[1] !== to) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, bufA); gl.bufferData(gl.ARRAY_BUFFER, norm(withBorder(xy(from.shape))), gl.DYNAMIC_DRAW);
-        gl.bindBuffer(gl.ARRAY_BUFFER, bufB); gl.bufferData(gl.ARRAY_BUFFER, norm(withBorder(xy(to.shape))), gl.DYNAMIC_DRAW);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, textureFor(from));
-        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, textureFor(to));
-        bound = [from, to];
-      }
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.uniform1f(uni('k'), k);
-      gl.drawElements(gl.TRIANGLES, tris.length, gl.UNSIGNED_SHORT, 0);
-    }
-    /**
-     * Morph endlessly through `faces` (an array that may keep growing), in random order.
-     * `seconds` is the time for one turn; it may be a function, so the speed can change while playing.
-     */
-    function play(faces, { seconds = 1.8 } = {}) {
-      let from = null, to = null, k = 0, last = 0, running = true;
-      const pick = () => { let f; do { f = faces[Math.floor(Math.random() * faces.length)]; } while (faces.length > 1 && f === to); return f; };
-      const frame = (now) => {
-        if (!running) return;
-        if (faces.length) {
-          if (!to) { from = pick(); to = pick(); k = 0; last = now; }
-          k += Math.min(now - last, 100) / ((typeof seconds === 'function' ? seconds() : seconds) * 1000);
-          last = now;
-          if (k >= 1) { from = to; to = pick(); k = 0; }
-          draw(from, to, k * k * (3 - 2 * k)); // ease in and out, never resting on one face for long
-        }
-        requestAnimationFrame(frame);
-      };
-      requestAnimationFrame(frame);
-      return () => { running = false; };
-    }
-    /** Free the GPU texture of a face that has left the playlist. */
-    function release(flat) {
-      const tex = textures.get(flat);
-      if (tex && bound[0] !== flat && bound[1] !== flat) { gl.deleteTexture(tex); textures.delete(flat); }
-    }
-    /** Free every GPU texture (used after one-off frames). */
-    function clear() {
-      for (const tex of textures.values()) gl.deleteTexture(tex);
-      textures.clear(); bound = [null, null];
-    }
-    return { canvas, draw, play, release, clear };
-  }
+  // The morph player lives outside the engine (see createMorphPlayer above); this one uses the engine's size.
+  const morphPlayer = (canvas, template, opts = {}) => createMorphPlayer(canvas, template, { ...opts, size });
 
   // Off-screen morph players used to render single frames (grid combinations, saved artifacts).
   const offscreen = new Map();
   function frame(template, from, to, k) {
-    if (!offscreen.has(template)) offscreen.set(template, createMorphPlayer(makeCanvas(size), template, { vignette: true }));
+    if (!offscreen.has(template)) offscreen.set(template, morphPlayer(makeCanvas(size), template, { vignette: true }));
     const player = offscreen.get(template);
     player.draw(from, to, k);
     const out = makeCanvas(size);
@@ -689,5 +702,5 @@ export async function createFaceEngine({ size = 512, wasm = 'vendor/mediapipe/wa
   /** Template shape for a collective: the mean of some starting faces, facing the camera. */
   const templateFrom = (faces) => meanShape(faces.map((f) => f.p3), size);
 
-  return { size, analyze, blend, createCollective, templateFrom, flatten, createMorphPlayer, comboFace, ovalTile };
+  return { size, analyze, blend, createCollective, templateFrom, flatten, createMorphPlayer: morphPlayer, comboFace, ovalTile };
 }

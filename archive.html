@@ -42,7 +42,7 @@
   <div id="status">Loading archive…</div>
 
 <script type="module">
-import { createFaceEngine } from './src/face-engine.js';
+import { createMorphPlayer } from './src/face-engine.js';
 import { createArchive } from './src/archive.js';
 import { FACE_TEMPLATE } from './src/face-template.js';
 import { HIDDEN_TILES } from './src/hidden-tiles.js';
@@ -160,8 +160,8 @@ try {
   }, REFRESH_EVERY_MS);
 
   status.textContent = `${total} faces · starting the collective face…`;
-  const engine = await createFaceEngine();
-  const player = engine.createMorphPlayer(canvas, FACE_TEMPLATE);
+  // Only the morph player is needed here: no face detection, so no models are downloaded.
+  const player = createMorphPlayer(canvas, FACE_TEMPLATE);
 
   /** The next face for the centre: a new arrival if there is one, otherwise a face on the wall. */
   async function nextTarget() {

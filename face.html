@@ -13,8 +13,33 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 10px; padding: 24px 16px;
     }
-    #face { width: min(82vw, 60vh, 520px); aspect-ratio: 1; object-fit: cover; filter: grayscale(100%); opacity: 0; transition: opacity 1.2s ease; }
-    #face.shown { opacity: 1; }
+    /* The face is a button: tap it to pause or resume the morph. */
+    #stage {
+      position: relative; width: min(82vw, 60vh, 520px); aspect-ratio: 1; margin: 4% 0 5%;
+      padding: 0; border: 0; background: none; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    #stage:focus-visible { outline: 1px dotted #969696; outline-offset: 12px; }
+    #face, #morph { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: grayscale(100%); opacity: 0; transition: opacity 1.2s ease; }
+    #face.shown, #morph.shown { opacity: 1; }
+
+    /* A thin ring around the face shows the state. While the face is morphing the ring breathes
+       and sends out a slow ripple; when it is paused the ring is still and dim. */
+    .ring {
+      position: absolute; left: 49.8%; top: 52.2%; width: 93%; height: 107%;
+      transform: translate(-50%, -50%); border-radius: 50%;
+      border: 1px solid rgba(245, 245, 240, 0.28); opacity: 0; pointer-events: none;
+      transition: opacity 0.8s ease, border-color 0.8s ease;
+    }
+    #stage.ready .ring { opacity: 1; }
+    #stage.morphing #ring { animation: ring-breathe 3.8s ease-in-out infinite; }
+    #stage.morphing #ripple { animation: ring-ripple 3.8s ease-out infinite; }
+    #stage:not(.morphing) #ripple { opacity: 0; }
+    @keyframes ring-breathe { 0%, 100% { border-color: rgba(245, 245, 240, 0.25); } 50% { border-color: rgba(245, 245, 240, 0.95); } }
+    @keyframes ring-ripple {
+      0% { transform: translate(-50%, -50%) scale(1); border-color: rgba(245, 245, 240, 0.7); }
+      100% { transform: translate(-50%, -50%) scale(1.14); border-color: rgba(245, 245, 240, 0); }
+    }
+    #state { min-height: 1.3em; letter-spacing: 0.08em; text-transform: uppercase; }
     p { margin: 0; font-size: clamp(15px, 3.8vw, 20px); }
     .small { color: #969696; font-size: clamp(11px, 2.8vw, 14px); }
     a { color: #f5f5f0; }
@@ -22,7 +47,13 @@
   </style>
 </head>
 <body>
-  <img id="face" alt="A face contributed to Evolving Portrait">
+  <button id="stage" type="button" aria-pressed="false" aria-label="Pause or resume the morphing face">
+    <img id="face" alt="A face contributed to Evolving Portrait">
+    <canvas id="morph" width="512" height="512"></canvas>
+    <span class="ring" id="ring"></span>
+    <span class="ring" id="ripple"></span>
+  </button>
+  <p class="small" id="state"></p>
   <p id="message">Thank you for contributing to EVOLVING PORTRAIT</p>
   <p class="small" id="detail"></p>
   <nav>
@@ -34,11 +65,12 @@
   // Shows one contributed face. The address carries its number: face.html?id=subject_123456
   const id = new URLSearchParams(location.search).get('id') || '';
   const face = document.getElementById('face');
+  const stage = document.getElementById('stage');
   const message = document.getElementById('message');
   const detail = document.getElementById('detail');
 
   if (!/^subject_[0-9]{4,12}$/.test(id)) {
-    face.remove();
+    stage.remove();
     message.textContent = 'EVOLVING PORTRAIT';
     detail.textContent = 'This link does not point to a face.';
   } else {
@@ -49,7 +81,7 @@
     // The face is uploaded a moment after it is made, so allow a few seconds for it to arrive.
     face.onerror = () => {
       if (++tries <= 6) setTimeout(() => { face.src = url + '?retry=' + tries; }, 1500);
-      else { face.remove(); detail.textContent += ' · this face has not arrived in the archive'; }
+      else { stage.remove(); detail.textContent += ' · this face has not arrived in the archive'; }
     };
     face.src = url;
     // Add the date it was contributed, when the archive has it.
@@ -59,6 +91,78 @@
       if (rows[0]) detail.textContent += ' · ' + new Date(rows[0].created_at).toLocaleDateString();
     }).catch(() => {});
   }
+</script>
+
+<script type="module">
+// The face morphs: it turns into each of the stored faces it was made from, and back to itself.
+// Tap the face to pause; it settles back on the contributed face and stays there.
+import { createMorphPlayer } from './src/face-engine.js';
+import { createArchive } from './src/archive.js';
+import { FACE_TEMPLATE } from './src/face-template.js';
+import { HIDDEN_TILES } from './src/hidden-tiles.js';
+
+const TURN_SECONDS = 3.8;   // one turn from face to face, the same as everywhere else on the site
+const REST_SECONDS = 1.6;   // how long it rests on each face
+const id = new URLSearchParams(location.search).get('id') || '';
+const stage = document.getElementById('stage');
+const state = document.getElementById('state');
+const canvas = document.getElementById('morph');
+
+async function start() {
+  if (!stage || !stage.isConnected || !/^subject_[0-9]{4,12}$/.test(id)) return;
+  const archive = createArchive({ url: SUPABASE_URL, key: SUPABASE_KEY });
+  // The face is uploaded a moment after it is made, so allow a few tries.
+  let mine = null;
+  for (let tries = 0; !mine && tries < 6; tries++) {
+    try { mine = await archive.loadFlat(id); } catch (e) { await new Promise((r) => setTimeout(r, 1500)); }
+  }
+  if (!mine) return; // the still picture stays
+  // The faces it was made from; if none can be loaded, a few faces from the archive.
+  const others = [];
+  const add = async (other) => {
+    if (other === id || HIDDEN_TILES.has(other) || others.some((f) => f.sessionId === other)) return;
+    try { others.push(await archive.loadFlat(other)); } catch (e) { /* skip it */ }
+  };
+  for (const parent of mine.parents) await add(parent);
+  const fromParents = others.length > 0;
+  if (!fromParents) { try { for (const other of await archive.randomFaces(4)) if (others.length < 2) await add(other); } catch (e) { /* offline */ } }
+  if (!others.length) return;
+
+  const player = createMorphPlayer(canvas, FACE_TEMPLATE);
+  let playing = true, k = 0, phase = 'rest', timer = 0, n = 0, last = performance.now();
+  const label = () => {
+    stage.classList.toggle('morphing', playing);
+    stage.setAttribute('aria-pressed', String(!playing));
+    state.textContent = playing
+      ? 'Morphing · tap to pause'
+      : 'Paused on your face · tap to resume';
+  };
+  stage.addEventListener('click', () => {
+    playing = !playing;
+    if (playing && k === 0) { phase = 'out'; }  // start turning straight away
+    label();
+  });
+  const ease = (x) => x * x * (3 - 2 * x);
+  const frame = (now) => {
+    const dt = Math.min(now - last, 100) / 1000; last = now;
+    if (!playing) {
+      k = Math.max(0, k - dt / (TURN_SECONDS * 0.4));           // settle back on the contributed face
+      if (k === 0 && phase !== 'rest') { phase = 'rest'; timer = 0; }
+    } else if (phase === 'rest') { timer += dt; if (timer >= REST_SECONDS) phase = 'out'; }
+    else if (phase === 'out') { k = Math.min(1, k + dt / TURN_SECONDS); if (k === 1) { phase = 'hold'; timer = 0; } }
+    else if (phase === 'hold') { timer += dt; if (timer >= REST_SECONDS) phase = 'back'; }
+    else { k = Math.max(0, k - dt / TURN_SECONDS); if (k === 0) { phase = 'rest'; timer = 0; n++; } }
+    player.draw(mine, others[n % others.length], ease(k));
+    requestAnimationFrame(frame);
+  };
+  player.draw(mine, others[0], 0);
+  canvas.classList.add('shown');
+  stage.classList.add('ready');
+  label();
+  requestAnimationFrame(frame);
+  window.__face = { ok: true, others: others.length, fromParents };
+}
+start().catch((e) => { console.error(e); window.__face = { ok: false, error: String(e) }; });
 </script>
 </body>
 </html>
